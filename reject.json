@@ -1,0 +1,1 @@
+{"name":"reject","description":"Reject a pending community post","options":[{"name":"id","description":"Post ID to reject","type":4,"required":true}]}

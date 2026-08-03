@@ -1,0 +1,1 @@
+{"name":"untrust","description":"Remove a users trusted status","options":[{"name":"user_id","description":"The BrikStax user id to untrust","type":3,"required":true}]}

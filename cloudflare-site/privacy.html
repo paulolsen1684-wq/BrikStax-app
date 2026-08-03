@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BrikStax Privacy Policy</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 0 auto; padding: 0 20px 80px; line-height: 1.6; color: #222; }
+  nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid #eee; margin-bottom: 28px; }
+  nav a { color: #222; text-decoration: none; font-size: 14px; }
+  nav a:hover { text-decoration: underline; }
+  nav .brand { font-weight: 700; }
+  h1 { font-size: 28px; margin-bottom: 4px; }
+  .updated { color: #666; font-size: 14px; margin-bottom: 32px; }
+  h2 { font-size: 19px; margin-top: 36px; border-bottom: 2px solid #eee; padding-bottom: 6px; }
+  h3 { font-size: 15px; margin-top: 20px; }
+  p, li { font-size: 15px; }
+  ul { padding-left: 20px; }
+  code { background: #f4f4f4; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  .contact { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 16px 20px; margin-top: 32px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="/">← BrikStax</a>
+  <a href="/terms">Terms of Service</a>
+</nav>
+
+<h1>BrikStax Privacy Policy</h1>
+<p class="updated">Last updated: July 21, 2026</p>
+
+<p>BrikStax is a personal LEGO® collection tracker with price tracking, a gamified avatar/cosmetics system, and an optional community photo feature. This policy explains what data the app collects, why, and where it goes.</p>
+
+<p><strong>BrikStax is not directed at children under 13, and we do not knowingly collect data from children under 13.</strong></p>
+
+<h2>What stays on your device</h2>
+<p>The following is stored locally on your device only, and never leaves it except where described below:</p>
+<ul>
+  <li>Your LEGO set collection — set numbers, names, purchase price, condition notes, quantities</li>
+  <li>Your wishlist</li>
+  <li>Your avatar, unlocked cosmetics, achievements, and daily streak progress</li>
+  <li>Your app theme and other preferences</li>
+</ul>
+
+<h2>What we send to our servers, and why</h2>
+<p>BrikStax talks to a backend we operate (hosted on Cloudflare) to fetch pricing data, cache lookups, and support the optional Community feature. Specifically:</p>
+
+<h3>Anonymous device identifier</h3>
+<p>On first launch, the app generates a random identifier (not tied to your name, email, or any account — there is no account) and stores it on your device. This id is sent alongside two specific actions:</p>
+<ul>
+  <li><strong>Barcode corrections</strong> — so we can tell when multiple different devices agree on a barcode-to-set match before trusting it</li>
+  <li><strong>Community photo submissions</strong> — so submission cooldowns apply per-device rather than globally</li>
+</ul>
+<p>This identifier cannot be used to determine who you are.</p>
+
+<h3>Set numbers, for pricing</h3>
+<p>When you look up or refresh a price, the app sends the LEGO set number and condition (sealed/open) to our server, which checks a shared cache or fetches current pricing from eBay (via a third-party pricing API), Rebrickable, or BrickSet. No personal information is included in these requests.</p>
+
+<h3>Community photos</h3>
+<p>If you choose to submit a photo to the Community feed:</p>
+<ul>
+  <li>Location and other identifying metadata (EXIF data) is automatically stripped from the photo <strong>before</strong> it's uploaded — the app re-encodes the image from scratch specifically so none of that data survives</li>
+  <li>The photo, along with any caption and set number you add, is sent to our server and held for review</li>
+  <li>A human moderator reviews it (via a private, internal channel) before it can appear in the public feed — rejected photos are deleted immediately</li>
+  <li>Approved photos appear in the public Community feed inside the app, and are automatically deleted 6 days after approval</li>
+</ul>
+<p>Only submit photos you have the right to share, and be mindful of what's visible in the frame — we strip location data automatically, but we can't strip identifying details you choose to photograph (people's faces, addresses on mail, etc.).</p>
+
+<h2>Camera access</h2>
+<p>BrikStax requests camera permission to scan LEGO set barcodes and to let you take a photo for a Community submission. The camera is only active when you're actively scanning or taking a photo — nothing is captured or transmitted without you initiating it.</p>
+
+<h2>Crash and error reporting</h2>
+<p>We use a third-party crash-reporting service (Sentry) to catch bugs and crashes. When the app encounters an error, technical diagnostic information may be sent automatically — this can include your device model, OS version, app version, and what the app was doing at the time. This is used solely to find and fix bugs, not to identify you personally.</p>
+
+<h2>Third parties we rely on</h2>
+<table style="width:100%; border-collapse: collapse; margin-top: 12px;">
+<tr style="text-align:left; border-bottom: 1px solid #ddd;"><th style="padding:6px 4px;">Service</th><th style="padding:6px 4px;">What it sees</th><th style="padding:6px 4px;">Why</th></tr>
+<tr style="border-bottom: 1px solid #eee;"><td style="padding:6px 4px;">Rebrickable</td><td style="padding:6px 4px;">Set/theme numbers</td><td style="padding:6px 4px;">Set &amp; theme lookup</td></tr>
+<tr style="border-bottom: 1px solid #eee;"><td style="padding:6px 4px;">BrickSet</td><td style="padding:6px 4px;">Set numbers</td><td style="padding:6px 4px;">Retail price &amp; barcode lookup</td></tr>
+<tr style="border-bottom: 1px solid #eee;"><td style="padding:6px 4px;">eBay (via RapidAPI)</td><td style="padding:6px 4px;">Set numbers &amp; condition</td><td style="padding:6px 4px;">Market price estimates — routed through our own server, so eBay never sees your device directly</td></tr>
+<tr style="border-bottom: 1px solid #eee;"><td style="padding:6px 4px;">Sentry</td><td style="padding:6px 4px;">Technical diagnostics</td><td style="padding:6px 4px;">Crash/error reporting</td></tr>
+<tr><td style="padding:6px 4px;">Discord</td><td style="padding:6px 4px;">Submitted Community photos</td><td style="padding:6px 4px;">Shown privately to moderators for approval, not the public Discord server</td></tr>
+</table>
+
+<h2>What we don't do</h2>
+<ul>
+  <li>No account sign-up, no name/email/password collected</li>
+  <li>No advertising, no ad networks, no ad tracking</li>
+  <li>We do not sell or trade your data</li>
+  <li>No location tracking — GPS data is actively stripped from any photo you submit</li>
+</ul>
+
+<h2>Your choices</h2>
+<p>Uninstalling the app removes all locally stored data. If you'd like a Community photo you submitted removed before its automatic 6-day expiry, contact us using the details below.</p>
+
+<h2>Changes to this policy</h2>
+<p>We'll update the date at the top of this page when this policy changes. Continued use of the app after a change means you accept the updated policy.</p>
+
+<div class="contact">
+  <strong>Questions about this policy?</strong><br>
+  Contact us at <a href="mailto:paul.olsen1684@gmail.com">paul.olsen1684@gmail.com</a>.
+</div>
+
+<p style="margin-top:32px; font-size:12px; color:#999;">LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize, or endorse this app.</p>
+
+</body>
+</html>

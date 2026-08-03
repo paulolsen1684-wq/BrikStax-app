@@ -1,0 +1,310 @@
+﻿// lib/modules/avatar/data/pixel_cosmetics.dart
+//
+// Catalog for the ground-up pixel-art avatar system -- separate from
+// sprite_cosmetics.dart's SpriteCosmetic on purpose (that file is
+// backgrounds-only now). This is the live figure catalog: head/hat/torso/
+// legs/item, rendered through PixelAvatarWidget.
+//
+// Ids are deliberately NOT the same as sprite_cosmetics.dart's (head_01
+// etc. already means something there) to avoid any risk of collision.
+//
+// rarity/description are real, load-bearing data now (not just stored
+// flavor text): loot_service.dart's reward pool, avatar_editor.dart's
+// unlocked/locked grid, and loot_roll_widget.dart's reveal popup all read
+// them. Only a handful of starter items (see AvatarState.defaults) start
+// unlocked -- everything else must be earned through the loot/reward
+// system, same as the background catalog always worked.
+import 'package:flutter/material.dart' show Color;
+import 'sprite_cosmetics.dart' show SpriteRarity, SpriteRarityX;
+
+enum PixelSlot { head, hat, torso, legs, item }
+enum PixelRarity { common, uncommon, rare, epic, legendary }
+
+/// Bridges the pixel catalog's rarity onto SpriteRarity's existing scale
+/// rather than maintaining a second parallel color/label/Brik-value system
+/// -- loot_service.dart's economy (brikValue, roll distribution) and any UI
+/// styling (rarity color/label) both key off SpriteRarity already.
+extension PixelRarityX on PixelRarity {
+  SpriteRarity get asSpriteRarity => switch (this) {
+    PixelRarity.common    => SpriteRarity.common,
+    PixelRarity.uncommon  => SpriteRarity.uncommon,
+    PixelRarity.rare      => SpriteRarity.rare,
+    PixelRarity.epic      => SpriteRarity.epic,
+    PixelRarity.legendary => SpriteRarity.legendary,
+  };
+  Color get color => asSpriteRarity.color;
+  String get label => asSpriteRarity.label;
+}
+
+class PixelCosmetic {
+  final String id;
+  final String name;
+  final PixelSlot slot;
+  final String assetPath;
+  final PixelRarity rarity;
+  final String? description;
+
+  // Optional animation frames for legendary/secret gear (e.g. a chrome
+  // shine sweep, an X-Wing engine flicker). Null/empty means the item is
+  // static -- renderFrames falls back to [assetPath], same pattern as
+  // SpriteCosmetic.frames/renderFrames/isAnimated. PixelAvatarWidget reads
+  // isAnimated to decide whether to run its own frame ticker for that
+  // layer at all -- most items are static, so most layers never allocate
+  // one.
+  final List<String>? frames;
+
+  // Same semantics as SpriteCosmetic.isSecret: hides the name/preview in
+  // the catalog grid until unlocked, and pulls this item into LootService's
+  // separate low-odds secret-drop pool instead of the normal tiered roll.
+  // Default false since most items are ordinary tiered rewards.
+  final bool isSecret;
+
+  // Per-item nudge on top of the shared slot geometry in pixel_avatar_widget
+  // .dart -- the compositor positions every item in a slot with ONE shared
+  // formula (e.g. all hats use the same box/anchor), which works until an
+  // outlier's own art doesn't match the average. offsetX/offsetY are in the
+  // same "unit" system pixel_avatar_widget.dart uses internally (art-pixels
+  // on a fixed-height canvas, not screen px); scale multiplies the slot's
+  // base width/height, expanding from the item's own center. Default 0/0/1
+  // means zero visual change -- every item that hasn't been individually
+  // tuned renders exactly like before this field existed. Values are meant
+  // to be set here by hand after tuning in PixelItemTunerScreen (dev-only,
+  // Settings > Developer), not edited live by real users.
+  final double offsetX;
+  final double offsetY;
+  final double scale;
+  const PixelCosmetic({
+    required this.id,
+    required this.name,
+    required this.slot,
+    required this.assetPath,
+    this.rarity = PixelRarity.common,
+    this.description,
+    this.frames,
+    this.isSecret = false,
+    this.offsetX = 0,
+    this.offsetY = 0,
+    this.scale = 1,
+  });
+
+  List<String> get renderFrames =>
+      (frames != null && frames!.isNotEmpty) ? frames! : [assetPath];
+
+  bool get isAnimated => renderFrames.length > 1;
+
+  PixelCosmetic copyWith({
+    double? offsetX, double? offsetY, double? scale,
+    List<String>? frames,
+  }) =>
+      PixelCosmetic(
+        id: id, name: name, slot: slot, assetPath: assetPath,
+        rarity: rarity, description: description,
+        frames: frames ?? this.frames, isSecret: isSecret,
+        offsetX: offsetX ?? this.offsetX,
+        offsetY: offsetY ?? this.offsetY,
+        scale: scale ?? this.scale,
+      );
+}
+
+const List<PixelCosmetic> allPixelCosmetics = [
+  PixelCosmetic(id: 'px_head_01', name: 'Head 01', slot: PixelSlot.head, assetPath: 'assets/avatar_pixel/heads/head_01.png'),
+  PixelCosmetic(id: 'px_head_02', name: 'Head 02', slot: PixelSlot.head, assetPath: 'assets/avatar_pixel/heads/head_02.png'),
+
+  PixelCosmetic(id: 'px_hat_bucket',  name: 'Bucket Hat',    slot: PixelSlot.hat, assetPath: 'assets/avatar_pixel/hats/hat_01_bucket.png', offsetX: -0.29, offsetY: -2.47, scale: 0.849),
+  PixelCosmetic(id: 'px_hat_safari',  name: 'Safari Hat',    slot: PixelSlot.hat, assetPath: 'assets/avatar_pixel/hats/hat_02_safari.png', offsetX: -0.38, offsetY: -2.62, scale: 0.84),
+  PixelCosmetic(id: 'px_hat_redcap',  name: 'Red Cap',       slot: PixelSlot.hat, assetPath: 'assets/avatar_pixel/hats/hat_03_redcap.png', offsetX: -2.01, offsetY: 0.63, scale: 0.879),
+  PixelCosmetic(id: 'px_hat_hardhat', name: 'Hard Hat',      slot: PixelSlot.hat, assetPath: 'assets/avatar_pixel/hats/hat_04_hardhat.png', offsetX: 0.05, offsetY: 0.97, scale: 1),
+  PixelCosmetic(id: 'px_hat_beanie',  name: 'Beanie',        slot: PixelSlot.hat, assetPath: 'assets/avatar_pixel/hats/hat_05_beanie.png'),
+
+  // Wave 1-3 additions below (~75 images added at once; Wave 4's names went
+  // entirely unused -- those images were never actually generated, only
+  // Waves 1-3 plus a handful of gaps within them exist as real files).
+  // Matched to art by visual content, not by generation order -- a spot
+  // check showed file creation order does NOT reliably match wave/list
+  // order, so each one was eyeballed against a contact-sheet grid rather
+  // than assigned positionally. Several form complete matching sets across
+  // hat+torso+legs+item (Ice Base Trooper, Castle Wizard, Harbor Watch,
+  // Sandstone Ruins, Tidepool Explorer, Jungle Explorer, Pirate variants) --
+  // that cross-slot coherence is what gives the matching confidence, not
+  // exhaustive verification of all 75.
+  PixelCosmetic(id: 'px_hat_skyfargoggle', name: "Skyfarer's Goggle Cap", slot: PixelSlot.hat, rarity: PixelRarity.rare, description: "Built for reading wind currents no one else can see.", assetPath: 'assets/avatar_pixel/hats/hat_06_skyfargoggle.png', offsetX: 0.07, offsetY: 1.6, scale: 0.753),
+  PixelCosmetic(id: 'px_hat_gardensun', name: 'Garden Sun Hat', slot: PixelSlot.hat, rarity: PixelRarity.common, description: 'Passed down through a family of enthusiastic backyard growers.', assetPath: 'assets/avatar_pixel/hats/hat_07_gardensun.png', offsetX: -0.5, offsetY: 0.15, scale: 0.755),
+  PixelCosmetic(id: 'px_hat_sandstonewrap', name: 'Sandstone Ruins Wrap', slot: PixelSlot.hat, rarity: PixelRarity.rare, description: 'Once belonged to someone who mapped ruins no map had ever shown.', assetPath: 'assets/avatar_pixel/hats/hat_08_sandstonewrap.png', offsetX: 1.74, offsetY: 0.73, scale: 0.872),
+  PixelCosmetic(id: 'px_hat_harborwatch', name: 'Harbor Watch Helmet', slot: PixelSlot.hat, rarity: PixelRarity.uncommon, description: 'Scoured smooth by decades of salt spray.', assetPath: 'assets/avatar_pixel/hats/hat_09_harborwatch.png', offsetX: -0.47, offsetY: 12.45, scale: 1.636),
+  PixelCosmetic(id: 'px_hat_tidepoolhood', name: "Tidepool Explorer's Hood", slot: PixelSlot.hat, rarity: PixelRarity.uncommon, description: "Damp more often than dry, and its wearer wouldn't have it any other way.", assetPath: 'assets/avatar_pixel/hats/hat_10_tidepoolhood.png', offsetX: -0.16, offsetY: 10.32, scale: 1.52),
+  PixelCosmetic(id: 'px_hat_fishermanbucket', name: "Fisherman's Bucket Hat", slot: PixelSlot.hat, rarity: PixelRarity.common, description: 'Smells like brine no matter how long it sits in the sun.', assetPath: 'assets/avatar_pixel/hats/hat_11_fishermanbucket.png', offsetX: -0.41, offsetY: 0.58, scale: 0.663),
+  PixelCosmetic(id: 'px_hat_cyclisthelmet', name: 'Rookie Cyclist Helmet', slot: PixelSlot.hat, rarity: PixelRarity.common, description: 'Still has the price tag mark faintly visible under the paint.', assetPath: 'assets/avatar_pixel/hats/hat_12_cyclisthelmet.png', offsetX: 0.09, offsetY: -0.19, scale: 0.893),
+  PixelCosmetic(id: 'px_hat_bakercap', name: "Baker's Cap", slot: PixelSlot.hat, rarity: PixelRarity.common, description: 'Dusted permanently with just a little too much flour.', assetPath: 'assets/avatar_pixel/hats/hat_13_bakercap.png', offsetX: -0.34, offsetY: -3.1, scale: 0.91),
+  PixelCosmetic(id: 'px_hat_piratetricorn', name: "Pirate Captain's Tricorn", slot: PixelSlot.hat, rarity: PixelRarity.uncommon, description: "Worn by someone who's never once lost a bet at sea.", assetPath: 'assets/avatar_pixel/hats/hat_14_piratetricorn.png'),
+  PixelCosmetic(id: 'px_hat_junglepith', name: "Jungle Explorer's Pith Helmet", slot: PixelSlot.hat, rarity: PixelRarity.rare, description: 'Has survived more vines and dead ends than its wearer likes to admit.', assetPath: 'assets/avatar_pixel/hats/hat_15_junglepith.png', offsetX: -0.14, offsetY: -1.07, scale: 0.799),
+  PixelCosmetic(id: 'px_hat_lighthousecap', name: "Lighthouse Keeper's Cap", slot: PixelSlot.hat, rarity: PixelRarity.uncommon, description: 'Worn through countless nights watching for ships that never came.', assetPath: 'assets/avatar_pixel/hats/hat_16_lighthousecap.png', offsetX: -0.5, offsetY: 0.44, scale: 0.822),
+  PixelCosmetic(id: 'px_hat_cityhardhat', name: "City Worker's Hard Hat", slot: PixelSlot.hat, rarity: PixelRarity.common, description: 'Dented in all the places that matter.', assetPath: 'assets/avatar_pixel/hats/hat_17_cityhardhat.png', offsetX: 0.95, offsetY: 1.21, scale: 0.975),
+  PixelCosmetic(id: 'px_hat_piratebandana', name: 'Pirate Crew Bandana', slot: PixelSlot.hat, rarity: PixelRarity.uncommon, description: "Tied the same way it's been tied for a hundred voyages.", assetPath: 'assets/avatar_pixel/hats/hat_18_piratebandana.png', offsetX: 2.39, offsetY: 3.78, scale: 0.811),
+  PixelCosmetic(id: 'px_hat_wizardstar', name: "Castle Wizard's Star Hat", slot: PixelSlot.hat, rarity: PixelRarity.rare, description: 'The stars stitched on it are said to shift position when no one\'s watching.', assetPath: 'assets/avatar_pixel/hats/hat_19_wizardstar.png', offsetX: 0.29, offsetY: -2.81, scale: 1.544),
+  PixelCosmetic(id: 'px_hat_icetrooper', name: 'Ice Base Trooper Helmet', slot: PixelSlot.hat, rarity: PixelRarity.epic, description: 'Rated for cold that would stop most expeditions before they started.', assetPath: 'assets/avatar_pixel/hats/hat_20_icetrooper.png', offsetX: -0.52, offsetY: 7.12, scale: 1.364),
+  PixelCosmetic(id: 'px_hat_spacemanhelmet', name: 'Classic Spaceman Helmet', slot: PixelSlot.hat, rarity: PixelRarity.common, description: 'Standard issue for anyone brave enough to leave the launchpad.', assetPath: 'assets/avatar_pixel/hats/hat_21_spacemanhelmet.png', offsetX: -0.41, offsetY: 7.12, scale: 1.484),
+
+  // Legendary/secret tier -- first entries with real animation frames
+  // (PixelCosmetic.frames/renderFrames/isAnimated). Forms one matched
+  // "Chrome" legendary set across all four figure slots (hat/torso/legs/
+  // item), each a 4-frame shine sweep; the X-Wing item down in the items
+  // section is the first isSecret pixel entry, 8 frames.
+  PixelCosmetic(
+    id: 'px_hat_legendarychrome', name: 'Chrome Helmet', slot: PixelSlot.hat,
+    rarity: PixelRarity.legendary,
+    description: 'Polished so bright it doubles as a mirror on parade day.',
+    assetPath: 'assets/avatar_pixel/hats/legendary_chromehelmet_f1.png',
+    frames: [
+      'assets/avatar_pixel/hats/legendary_chromehelmet_f1.png',
+      'assets/avatar_pixel/hats/legendary_chromehelmet_f2.png',
+      'assets/avatar_pixel/hats/legendary_chromehelmet_f3.png',
+      'assets/avatar_pixel/hats/legendary_chromehelmet_f4.png',
+    ],
+  ),
+
+  PixelCosmetic(id: 'px_torso_yellowjacket', name: 'Yellow Jacket',  slot: PixelSlot.torso, assetPath: 'assets/avatar_pixel/torsos/torso_01_yellowjacket.png'),
+  PixelCosmetic(id: 'px_torso_plaid',        name: 'Plaid Flannel',  slot: PixelSlot.torso, assetPath: 'assets/avatar_pixel/torsos/torso_02_plaid.png'),
+  PixelCosmetic(id: 'px_torso_graysweater',  name: 'Gray Sweater',   slot: PixelSlot.torso, assetPath: 'assets/avatar_pixel/torsos/torso_03_graysweater.png'),
+  PixelCosmetic(id: 'px_torso_overalls',     name: 'Green Overalls', slot: PixelSlot.torso, assetPath: 'assets/avatar_pixel/torsos/torso_04_overalls.png'),
+  PixelCosmetic(id: 'px_torso_redvest',      name: 'Red Vest',       slot: PixelSlot.torso, assetPath: 'assets/avatar_pixel/torsos/torso_05_redvest.png', offsetX: -0.14, offsetY: 0.92, scale: 0.924),
+
+  PixelCosmetic(id: 'px_torso_sandstonetunic', name: 'Sandstone Ruins Tunic', slot: PixelSlot.torso, rarity: PixelRarity.rare, description: 'Sun-bleached from seasons spent somewhere the map insisted was empty.', assetPath: 'assets/avatar_pixel/torsos/torso_06_sandstonetunic.png', offsetX: -0.61, offsetY: 0.05, scale: 0.909),
+  PixelCosmetic(id: 'px_torso_builderutility', name: "Builder's Utility Jacket", slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Pockets deep enough to hold a whole handful of loose pieces.', assetPath: 'assets/avatar_pixel/torsos/torso_07_builderutility.png'),
+  PixelCosmetic(id: 'px_torso_cyclistjersey', name: 'Rookie Cyclist Jersey', slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Still smells new, still a little too stiff.', assetPath: 'assets/avatar_pixel/torsos/torso_08_cyclistjersey.png', offsetX: -0.2, offsetY: -2.37, scale: 0.816),
+  PixelCosmetic(id: 'px_torso_campfiresweater', name: 'Campfire Sweater', slot: PixelSlot.torso, rarity: PixelRarity.common, description: "Smells faintly of woodsmoke no matter how many times it's washed.", assetPath: 'assets/avatar_pixel/torsos/torso_09_campfiresweater.png', offsetX: 0.11, offsetY: -0.19, scale: 0.937),
+  PixelCosmetic(id: 'px_torso_tidepoolvest', name: "Tidepool Explorer's Vest", slot: PixelSlot.torso, rarity: PixelRarity.uncommon, description: 'Its pockets have held more curious little shells than anyone can remember.', assetPath: 'assets/avatar_pixel/torsos/torso_10_tidepoolvest.png'),
+  PixelCosmetic(id: 'px_torso_harborwatchsuit', name: 'Harbor Watch Suit', slot: PixelSlot.torso, rarity: PixelRarity.uncommon, description: 'Built for someone who trusts the sea more than dry land.', assetPath: 'assets/avatar_pixel/torsos/torso_11_harborwatchsuit.png'),
+  PixelCosmetic(id: 'px_torso_fishermanoilskin', name: "Fisherman's Oilskin Jacket", slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Waterproof in theory, character-building in practice.', assetPath: 'assets/avatar_pixel/torsos/torso_12_fishermanoilskin.png'),
+  PixelCosmetic(id: 'px_torso_snowtrekkerparka', name: 'Snow Trekker Parka', slot: PixelSlot.torso, rarity: PixelRarity.uncommon, description: "Has weathered blizzards its owner would rather forget.", assetPath: 'assets/avatar_pixel/torsos/torso_13_snowtrekkerparka.png'),
+  PixelCosmetic(id: 'px_torso_porchcardigan', name: "Porch Sitter's Cardigan", slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Soft from years of being exactly the right amount of warm.', assetPath: 'assets/avatar_pixel/torsos/torso_14_porchcardigan.png'),
+  PixelCosmetic(id: 'px_torso_bakerapron', name: "Baker's Apron", slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Never fully clean, always ready for one more batch.', assetPath: 'assets/avatar_pixel/torsos/torso_15_bakerapron.png'),
+  PixelCosmetic(id: 'px_torso_mailcarrieruniform', name: 'City Mailcarrier Uniform', slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Crisp at 8 AM, a little less crisp by noon.', assetPath: 'assets/avatar_pixel/torsos/torso_16_mailcarrieruniform.png', offsetX: 0.07, offsetY: 0.73, scale: 0.901),
+  PixelCosmetic(id: 'px_torso_cityworkervest', name: "City Worker's Vest", slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Reflective enough to be seen from three blocks away.', assetPath: 'assets/avatar_pixel/torsos/torso_17_cityworkervest.png', offsetX: -0.11, offsetY: 0.1, scale: 0.926),
+  PixelCosmetic(id: 'px_torso_lighthousecoat', name: "Lighthouse Keeper's Coat", slot: PixelSlot.torso, rarity: PixelRarity.uncommon, description: 'Heavy enough to withstand a storm that never seems to end.', assetPath: 'assets/avatar_pixel/torsos/torso_18_lighthousecoat.png', offsetX: -0.36, offsetY: 0.34, scale: 0.876),
+  PixelCosmetic(id: 'px_torso_gardenoveralls', name: 'Garden Overalls Top', slot: PixelSlot.torso, rarity: PixelRarity.common, description: 'Stained green at the knees from an honest day\'s work.', assetPath: 'assets/avatar_pixel/torsos/torso_19_gardenoveralls.png', offsetX: -0.38, offsetY: -0.05, scale: 0.912),
+  PixelCosmetic(id: 'px_torso_piratecoat', name: "Pirate Captain's Coat", slot: PixelSlot.torso, rarity: PixelRarity.uncommon, description: 'Gold buttons polished, reputation slightly less so.', assetPath: 'assets/avatar_pixel/torsos/torso_20_piratecoat.png', offsetX: 0.32, offsetY: -1.4, scale: 0.946),
+  PixelCosmetic(id: 'px_torso_piratecrewshirt', name: 'Pirate Crew Shirt', slot: PixelSlot.torso, rarity: PixelRarity.uncommon, description: 'Salt-stiff and proud of it.', assetPath: 'assets/avatar_pixel/torsos/torso_21_piratecrewshirt.png', offsetX: 0, offsetY: -0.19, scale: 0.885),
+  PixelCosmetic(id: 'px_torso_knightarmor', name: "Castle Knight's Armor", slot: PixelSlot.torso, rarity: PixelRarity.uncommon, description: "Bears a scratch from a duel that's grown taller in the retelling.", assetPath: 'assets/avatar_pixel/torsos/torso_22_knightarmor.png', offsetX: -0.32, offsetY: 1.45, scale: 0.943),
+  PixelCosmetic(id: 'px_torso_junglevest', name: "Jungle Explorer's Vest", slot: PixelSlot.torso, rarity: PixelRarity.rare, description: 'Every pocket holds something found and nothing thrown away.', assetPath: 'assets/avatar_pixel/torsos/torso_23_junglevest.png', offsetX: 0.09, offsetY: 1.11, scale: 0.855),
+  PixelCosmetic(id: 'px_torso_wizardstarrobe', name: "Castle Wizard's Star Robe", slot: PixelSlot.torso, rarity: PixelRarity.rare, description: 'Its crescent moon glows the faintest bit brighter on clear nights.', assetPath: 'assets/avatar_pixel/torsos/torso_24_wizardstarrobe.png', offsetX: -0.45, offsetY: 0.44, scale: 0.933),
+  PixelCosmetic(id: 'px_torso_icetroopersuit', name: 'Ice Base Trooper Suit', slot: PixelSlot.torso, rarity: PixelRarity.epic, description: 'The frost emblem never quite melts, no matter the season.', assetPath: 'assets/avatar_pixel/torsos/torso_25_icetroopersuit.png', offsetX: -0.2, offsetY: 2.28, scale: 1.01),
+
+  PixelCosmetic(
+    id: 'px_torso_legendarychrome', name: 'Chrome Jacket', slot: PixelSlot.torso,
+    rarity: PixelRarity.legendary,
+    description: "The scarf is just for style -- the shine does all the talking.",
+    assetPath: 'assets/avatar_pixel/torsos/legendary_chrometorso_f1.png',
+    frames: [
+      'assets/avatar_pixel/torsos/legendary_chrometorso_f1.png',
+      'assets/avatar_pixel/torsos/legendary_chrometorso_f2.png',
+      'assets/avatar_pixel/torsos/legendary_chrometorso_f3.png',
+      'assets/avatar_pixel/torsos/legendary_chrometorso_f4.png',
+    ],
+  ),
+
+  PixelCosmetic(id: 'px_legs_bluejeans',  name: 'Blue Jeans',      slot: PixelSlot.legs, assetPath: 'assets/avatar_pixel/legs/legs_01_bluejeans.png', offsetX: 0.29, offsetY: -6.54, scale: 1.007),
+  PixelCosmetic(id: 'px_legs_redpants',   name: 'Red Pants',       slot: PixelSlot.legs, assetPath: 'assets/avatar_pixel/legs/legs_02_redpants.png'),
+  PixelCosmetic(id: 'px_legs_graysweats', name: 'Gray Sweatpants', slot: PixelSlot.legs, assetPath: 'assets/avatar_pixel/legs/legs_03_graysweats.png'),
+  PixelCosmetic(id: 'px_legs_greenshorts',name: 'Green Shorts',    slot: PixelSlot.legs, assetPath: 'assets/avatar_pixel/legs/legs_04_greenshorts.png'),
+
+  PixelCosmetic(id: 'px_legs_harborwatch', name: 'Harbor Watch Trousers', slot: PixelSlot.legs, rarity: PixelRarity.uncommon, description: "Rivets rusted just enough to prove they've earned their keep.", assetPath: 'assets/avatar_pixel/legs/legs_05_harborwatch.png'),
+  PixelCosmetic(id: 'px_legs_junglecargo', name: "Jungle Explorer's Cargo Trousers", slot: PixelSlot.legs, rarity: PixelRarity.rare, description: 'Every pocket holds a different half-finished field note.', assetPath: 'assets/avatar_pixel/legs/legs_06_junglecargo.png'),
+  PixelCosmetic(id: 'px_legs_sandstone', name: 'Sandstone Ruins Trousers', slot: PixelSlot.legs, rarity: PixelRarity.rare, description: "Carry dust from ruins that most maps swear don't exist.", assetPath: 'assets/avatar_pixel/legs/legs_07_sandstone.png'),
+  PixelCosmetic(id: 'px_legs_cyclistshorts', name: 'Rookie Cyclist Shorts', slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'Still adjusting to actually being used for cycling.', assetPath: 'assets/avatar_pixel/legs/legs_08_cyclistshorts.png'),
+  PixelCosmetic(id: 'px_legs_cityworker', name: "City Worker's Trousers", slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'The tool loop has never once been empty.', assetPath: 'assets/avatar_pixel/legs/legs_09_cityworker.png'),
+  PixelCosmetic(id: 'px_legs_tidepool', name: "Tidepool Explorer's Trousers", slot: PixelSlot.legs, rarity: PixelRarity.uncommon, description: 'Rolled up just enough to keep the hems dry -- usually.', assetPath: 'assets/avatar_pixel/legs/legs_10_tidepool.png', offsetX: 0.95, offsetY: 0.1, scale: 1),
+  PixelCosmetic(id: 'px_legs_fishermanwaders', name: "Fisherman's Waders", slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'Have stood in more cold water than anyone should willingly choose to.', assetPath: 'assets/avatar_pixel/legs/legs_11_fishermanwaders.png', offsetX: 0.99, offsetY: 1.07, scale: 1),
+  PixelCosmetic(id: 'px_legs_snowtrekker', name: 'Snow Trekker Trousers', slot: PixelSlot.legs, rarity: PixelRarity.uncommon, description: 'Never quite dries out between expeditions.', assetPath: 'assets/avatar_pixel/legs/legs_12_snowtrekker.png'),
+  PixelCosmetic(id: 'px_legs_porchslacks', name: "Porch Sitter's Slacks", slot: PixelSlot.legs, rarity: PixelRarity.common, description: "Comfortable enough to forget you're wearing them.", assetPath: 'assets/avatar_pixel/legs/legs_13_porchslacks.png'),
+  PixelCosmetic(id: 'px_legs_bakertrousers', name: "Baker's Trousers", slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'Flour-dusted by 6 AM, every single morning.', assetPath: 'assets/avatar_pixel/legs/legs_14_bakertrousers.png'),
+  PixelCosmetic(id: 'px_legs_mailcarrier', name: 'City Mailcarrier Trousers', slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'Pressed each morning, rumpled by the third stop.', assetPath: 'assets/avatar_pixel/legs/legs_15_mailcarrier.png'),
+  PixelCosmetic(id: 'px_legs_wizardstar', name: "Castle Wizard's Star Trousers", slot: PixelSlot.legs, rarity: PixelRarity.rare, description: 'The single stitched star has never once faded.', assetPath: 'assets/avatar_pixel/legs/legs_16_wizardstar.png'),
+  PixelCosmetic(id: 'px_legs_spaceman', name: 'Classic Spaceman Trousers', slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'Standard-issue, built to survive re-entry and then some.', assetPath: 'assets/avatar_pixel/legs/legs_17_spaceman.png'),
+  PixelCosmetic(id: 'px_legs_emberbattle', name: 'Ember Battle Greaves', slot: PixelSlot.legs, rarity: PixelRarity.epic, description: 'Leaves a faint scorch mark on anything they brush against.', assetPath: 'assets/avatar_pixel/legs/legs_18_emberbattle.png'),
+  PixelCosmetic(id: 'px_legs_weekenddenim2', name: 'Weekend Denim', slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'Faded just enough to feel like an old friend.', assetPath: 'assets/avatar_pixel/legs/legs_19_weekenddenim2.png'),
+  PixelCosmetic(id: 'px_legs_campfire', name: 'Campfire Trousers', slot: PixelSlot.legs, rarity: PixelRarity.common, description: 'Warm enough for chilly nights, sturdy enough for late-night marshmallow duty.', assetPath: 'assets/avatar_pixel/legs/legs_20_campfire.png'),
+  PixelCosmetic(id: 'px_legs_piratecrew', name: 'Pirate Crew Trousers', slot: PixelSlot.legs, rarity: PixelRarity.uncommon, description: 'Rolled up out of habit, even on dry land.', assetPath: 'assets/avatar_pixel/legs/legs_21_piratecrew.png'),
+  PixelCosmetic(id: 'px_legs_knightgreaves', name: "Castle Knight's Greaves", slot: PixelSlot.legs, rarity: PixelRarity.uncommon, description: "Clank just loud enough to announce who's coming.", assetPath: 'assets/avatar_pixel/legs/legs_22_knightgreaves.png'),
+  PixelCosmetic(id: 'px_legs_frontierscout', name: 'Frontier Scout Trousers', slot: PixelSlot.legs, rarity: PixelRarity.uncommon, description: 'Reinforced at the knee from one too many careless landings.', assetPath: 'assets/avatar_pixel/legs/legs_23_frontierscout.png'),
+  PixelCosmetic(id: 'px_legs_icetrooper', name: 'Ice Base Trooper Greaves', slot: PixelSlot.legs, rarity: PixelRarity.epic, description: 'Built to keep moving long after the cold should have stopped them.', assetPath: 'assets/avatar_pixel/legs/legs_24_icetrooper.png'),
+
+  PixelCosmetic(
+    id: 'px_legs_legendarychrome', name: 'Chrome Greaves', slot: PixelSlot.legs,
+    rarity: PixelRarity.legendary,
+    description: 'Every step catches the light a little differently.',
+    assetPath: 'assets/avatar_pixel/legs/legendary_chromelegs_f1.png',
+    frames: [
+      'assets/avatar_pixel/legs/legendary_chromelegs_f1.png',
+      'assets/avatar_pixel/legs/legendary_chromelegs_f2.png',
+      'assets/avatar_pixel/legs/legendary_chromelegs_f3.png',
+      'assets/avatar_pixel/legs/legendary_chromelegs_f4.png',
+    ],
+  ),
+
+  PixelCosmetic(id: 'px_item_trophy',     name: 'Trophy',       slot: PixelSlot.item, assetPath: 'assets/avatar_pixel/items/item_01_trophy.png', offsetX: -4.13, offsetY: -15.35, scale: 1.348),
+  PixelCosmetic(id: 'px_item_brickstack', name: 'Brick Stack',  slot: PixelSlot.item, assetPath: 'assets/avatar_pixel/items/item_02_brickstack.png', offsetX: -5.33, offsetY: -13.17, scale: 1.379),
+  PixelCosmetic(id: 'px_item_wateringcan',name: 'Watering Can', slot: PixelSlot.item, assetPath: 'assets/avatar_pixel/items/item_03_wateringcan.png', offsetX: -5.06, offsetY: -18.94, scale: 1.394),
+  PixelCosmetic(id: 'px_item_toolbox',    name: 'Toolbox',      slot: PixelSlot.item, assetPath: 'assets/avatar_pixel/items/item_04_toolbox.png', offsetX: -5.87, offsetY: -17.87, scale: 1.299),
+
+  PixelCosmetic(id: 'px_item_harboranchor', name: 'Harbor Watch Anchor', slot: PixelSlot.item, rarity: PixelRarity.uncommon, description: "Hasn't moved in years, and somehow still feels ready to.", assetPath: 'assets/avatar_pixel/items/item_05_harboranchor.png', offsetX: -5.94, offsetY: -19.32, scale: 1.397),
+  PixelCosmetic(id: 'px_item_tidepoolnet', name: "Tidepool Explorer's Net", slot: PixelSlot.item, rarity: PixelRarity.uncommon, description: 'Scooped up more curiosities than complaints.', assetPath: 'assets/avatar_pixel/items/item_06_tidepoolnet.png', offsetX: -4.68, offsetY: -19.13, scale: 1.311),
+  PixelCosmetic(id: 'px_item_lighthouselamp', name: "Lighthouse Keeper's Lamp", slot: PixelSlot.item, rarity: PixelRarity.uncommon, description: "Its light has guided more ships home than its keeper will ever know.", assetPath: 'assets/avatar_pixel/items/item_07_lighthouselamp.png', offsetX: -5.65, offsetY: -19.37, scale: 1.426),
+  PixelCosmetic(id: 'px_item_camplantern', name: 'Camp Lantern', slot: PixelSlot.item, rarity: PixelRarity.common, description: "Lights the way back to camp long after the fire's gone out.", assetPath: 'assets/avatar_pixel/items/item_08_camplantern.png', offsetX: -2.82, offsetY: -20.49, scale: 1.605),
+  PixelCosmetic(id: 'px_item_alchemistcauldron', name: "Alchemist's Cauldron", slot: PixelSlot.item, rarity: PixelRarity.rare, description: "Bubbles occasionally, even when nothing's cooking.", assetPath: 'assets/avatar_pixel/items/item_09_alchemistcauldron.png', offsetX: -8.29, offsetY: -19.52, scale: 1.467),
+  PixelCosmetic(id: 'px_item_sandstonetablet', name: 'Sandstone Ruins Tablet', slot: PixelSlot.item, rarity: PixelRarity.rare, description: "Its symbols mean something -- nobody's quite cracked what, yet.", assetPath: 'assets/avatar_pixel/items/item_10_sandstonetablet.png', offsetX: -7.84, offsetY: -19.66, scale: 1.425),
+  PixelCosmetic(id: 'px_item_alchemistpotionrack', name: "Alchemist's Potion Rack", slot: PixelSlot.item, rarity: PixelRarity.epic, description: "Three bottles, three colors, one very firm rule about not mixing them.", assetPath: 'assets/avatar_pixel/items/item_11_alchemistpotionrack.png', offsetX: -8.47, offsetY: -18.4, scale: 1.447),
+  PixelCosmetic(id: 'px_item_cyclistbike', name: "Rookie Cyclist's Bike", slot: PixelSlot.item, rarity: PixelRarity.common, description: 'Still has that new-bike shine, mostly.', assetPath: 'assets/avatar_pixel/items/item_12_cyclistbike.png', offsetX: -9.37, offsetY: -28.53, scale: 1.737),
+  PixelCosmetic(id: 'px_item_fishermanbucket', name: "Fisherman's Bucket", slot: PixelSlot.item, rarity: PixelRarity.common, description: "Has held everything from bait to the world's luckiest catch.", assetPath: 'assets/avatar_pixel/items/item_13_fishermanbucket.png', offsetX: -5.99, offsetY: -12.35, scale: 1.063),
+  PixelCosmetic(id: 'px_item_porchrocker', name: "Porch Sitter's Rocking Chair", slot: PixelSlot.item, rarity: PixelRarity.common, description: 'Creaks in exactly the right rhythm for an afternoon nap.', assetPath: 'assets/avatar_pixel/items/item_14_porchrocker.png', offsetX: -6.64, offsetY: -23.34, scale: 1.569),
+  PixelCosmetic(id: 'px_item_cityconestack', name: "City Worker's Cone Stack", slot: PixelSlot.item, rarity: PixelRarity.common, description: 'Marks the spot where something is always, always under construction.', assetPath: 'assets/avatar_pixel/items/item_15_cityconestack.png', offsetX: -7.36, offsetY: -22.23, scale: 1.562),
+  PixelCosmetic(id: 'px_item_citymailbox', name: "City Mailcarrier's Mailbox", slot: PixelSlot.item, rarity: PixelRarity.common, description: 'Somehow always has one more letter than expected.', assetPath: 'assets/avatar_pixel/items/item_16_citymailbox.png', offsetX: -5.83, offsetY: -20.29, scale: 1.488),
+  PixelCosmetic(id: 'px_item_pirateparrot', name: 'Pirate Crew Parrot Perch', slot: PixelSlot.item, rarity: PixelRarity.uncommon, description: 'The parrot has heard every version of every story told on this ship.', assetPath: 'assets/avatar_pixel/items/item_17_pirateparrot.png', offsetX: -4.97, offsetY: -23.2, scale: 1.658),
+  PixelCosmetic(id: 'px_item_knightbanner', name: "Castle Knight's Banner Stand", slot: PixelSlot.item, rarity: PixelRarity.uncommon, description: 'Raised only when the cause is worth rallying behind.', assetPath: 'assets/avatar_pixel/items/item_18_knightbanner.png', offsetX: -4.74, offsetY: -18.7, scale: 1.405),
+  PixelCosmetic(id: 'px_item_spacemanjetpack', name: 'Classic Spaceman Jetpack Stand', slot: PixelSlot.item, rarity: PixelRarity.common, description: 'Waiting patiently for the next launch window.', assetPath: 'assets/avatar_pixel/items/item_19_spacemanjetpack.png', offsetX: -3.59, offsetY: -17.97, scale: 1.366),
+  PixelCosmetic(id: 'px_item_farmyardhay', name: 'Farmyard Hay Bale', slot: PixelSlot.item, rarity: PixelRarity.common, description: 'A perfectly good seat, if no one else claims it first.', assetPath: 'assets/avatar_pixel/items/item_20_farmyardhay.png'),
+  PixelCosmetic(id: 'px_item_piratechest', name: "Pirate Captain's Treasure Chest", slot: PixelSlot.item, rarity: PixelRarity.uncommon, description: 'Locked tight, and everyone has their own theory about what\'s inside.', assetPath: 'assets/avatar_pixel/items/item_21_piratechest.png', offsetX: -8.15, offsetY: -21.41, scale: 1.485),
+  PixelCosmetic(id: 'px_item_junglemaptable', name: "Jungle Explorer's Map Table", slot: PixelSlot.item, rarity: PixelRarity.rare, description: "The map is only half-finished, and that's exactly the appeal.", assetPath: 'assets/avatar_pixel/items/item_22_junglemaptable.png', offsetX: -7.16, offsetY: -20.87, scale: 1.498),
+  PixelCosmetic(id: 'px_item_icetrooperscanner', name: "Ice Base Trooper's Scanner", slot: PixelSlot.item, rarity: PixelRarity.epic, description: "Still picking up readings nobody's quite figured out how to explain.", assetPath: 'assets/avatar_pixel/items/item_23_icetrooperscanner.png', offsetX: -5.69, offsetY: -18.45, scale: 1.377),
+
+  PixelCosmetic(
+    id: 'px_item_legendarychrome', name: 'Chrome Trophy', slot: PixelSlot.item,
+    rarity: PixelRarity.legendary,
+    description: 'Not for any achievement in particular -- just for having it.',
+    assetPath: 'assets/avatar_pixel/items/legendary_chrometrophy_f1.png',
+    frames: [
+      'assets/avatar_pixel/items/legendary_chrometrophy_f1.png',
+      'assets/avatar_pixel/items/legendary_chrometrophy_f2.png',
+      'assets/avatar_pixel/items/legendary_chrometrophy_f3.png',
+      'assets/avatar_pixel/items/legendary_chrometrophy_f4.png',
+    ],
+  ),
+
+  // First isSecret pixel entry -- hidden from the catalog grid (shows as
+  // "???" instead of its name) until unlocked, pulled by LootService's
+  // separate low-odds _maybeSecretDrop check rather than the normal
+  // tiered roll. rarity still needs a real value even though isSecret
+  // items don't roll through the tiered pool -- it's what prices the Brik
+  // dupe-payout if this is ever rolled again after already being found.
+  PixelCosmetic(
+    id: 'px_item_secretxwing', name: 'X-Wing Fighter', slot: PixelSlot.item,
+    rarity: PixelRarity.legendary, isSecret: true,
+    description: "Nobody remembers unlocking this one. It was just... there, one day.",
+    assetPath: 'assets/avatar_pixel/items/secret_xwing_f1.png',
+    frames: [
+      'assets/avatar_pixel/items/secret_xwing_f1.png',
+      'assets/avatar_pixel/items/secret_xwing_f2.png',
+      'assets/avatar_pixel/items/secret_xwing_f3.png',
+      'assets/avatar_pixel/items/secret_xwing_f4.png',
+      'assets/avatar_pixel/items/secret_xwing_f5.png',
+      'assets/avatar_pixel/items/secret_xwing_f6.png',
+      'assets/avatar_pixel/items/secret_xwing_f7.png',
+      'assets/avatar_pixel/items/secret_xwing_f8.png',
+    ],
+  ),
+];
+
+List<PixelCosmetic> pixelCosmeticsForSlot(PixelSlot slot) =>
+    allPixelCosmetics.where((c) => c.slot == slot).toList();
+
+Map<String, PixelCosmetic> get pixelCosmeticsById =>
+    { for (final c in allPixelCosmetics) c.id: c };

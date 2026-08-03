@@ -1,0 +1,1 @@
+{"name":"newslink","description":"Fetch an article and post it to the news feed","options":[{"name":"url","description":"The article URL","type":3,"required":true}]}

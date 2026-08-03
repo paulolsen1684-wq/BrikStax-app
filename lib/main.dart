@@ -1,0 +1,265 @@
+// lib/main.dart — BrikStax
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+import 'modules/avatar/avatar_module.dart';
+import 'modules/avatar/services/achievement_service.dart';
+import 'modules/avatar/services/loot_service.dart';
+import 'modules/avatar/services/hidden_theme_service.dart';
+import 'modules/avatar/services/dev_mode.dart';
+import 'modules/avatar/services/daily_five_service.dart';
+import 'providers/collection.dart';
+import 'services/wishlist_service.dart';
+import 'modules/community/services/community_service.dart';
+import 'services/feature_flag_service.dart';
+import 'services/device_identity.dart';
+import 'screens/dashboard.dart';
+import 'screens/inventory.dart';
+import 'screens/scanner.dart';
+import 'screens/settings.dart';
+import 'screens/add_set.dart';
+import 'screens/wishlist_screen.dart';
+import 'screens/community_feed_screen.dart';
+import 'theme/app_theme.dart';
+import 'services/theme_service.dart';
+import 'theme/app_themes.dart';
+import 'utils/brik_page_route.dart';
+import 'services/widget_service.dart';
+
+/// Flip to false to hide the Wishlist tab everywhere. Single source of truth.
+const bool kWishlistEnabled = true;
+/// Flip to false to hide the Community tab everywhere.
+const bool kCommunityEnabled = true;
+
+// Sentry project DSN — paste yours from sentry.io (Settings → Client Keys).
+// A DSN isn't a secret (it's a write-only client identifier, same trust
+// level as the Rebrickable/BrickSet keys already embedded elsewhere in this
+// app) so it's fine committed here. Left blank, Sentry's SDK silently
+// no-ops instead of erroring — safe to ship as-is until a real value lands.
+const String _kSentryDsn =
+    'https://0160da363ec184032237bdb7866495a4@o4511775363825664.ingest.us.sentry.io/4511775367168000';
+
+void main() async {
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = _kSentryDsn;
+      options.environment = kReleaseMode ? 'production' : 'debug';
+    },
+    appRunner: () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
+      await AchievementService.instance.init();
+      await LootService.instance.init();
+      await DevMode.instance.init();
+      await DailyFiveService.instance.init();
+      await HiddenThemeService.instance.init();
+      await WishlistService.instance.init();
+      await ThemeService.instance.init();
+      await FeatureFlagService.instance.init();
+      await DeviceIdentity.instance.init();
+
+      runApp(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider(create: (_) => CollectionProvider()..init()),
+            ChangeNotifierProvider.value(value: WishlistService.instance),
+            ChangeNotifierProvider.value(value: CommunityService.instance),
+          ],
+          child: const BrikStaxApp(),
+        ),
+      );
+    },
+  );
+}
+
+class BrikStaxApp extends StatelessWidget {
+  const BrikStaxApp({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: ThemeService.instance,
+    builder: (_, __) {
+      final svc = ThemeService.instance;
+      return MaterialApp(
+        title: 'BrikStax',
+        debugShowCheckedModeBanner: false,
+        theme: svc.activeTheme,
+        home: const _Shell(),
+      );
+    },
+  );
+}
+
+class _Shell extends StatefulWidget {
+  const _Shell();
+  @override State<_Shell> createState() => _ShellState();
+}
+
+class _ShellState extends State<_Shell> {
+  int _tab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkWidgetLaunch();
+  }
+
+  // If the app was opened via the home screen widget's "Scan" button
+  // (brikstax://scan), jump straight to the scanner instead of landing
+  // on the normal Dashboard start.
+  Future<void> _checkWidgetLaunch() async {
+    final fromScanWidget = await WidgetService.instance.launchedFromScanWidget();
+    if (fromScanWidget && mounted) {
+      // Wait for the first frame so Navigator/context are fully ready.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.push(context,
+              BrikPageRoute(page: const ScannerScreen()));
+        }
+      });
+    }
+  }
+
+  // Body screens (scanner is excluded — it opens as a modal).
+  // Wishlist and Community are appended only when their flags are on.
+  // Index map: 0 Home · 1 Sets · 2 Settings · 3 Wishlist · 4 Community
+  List<Widget> get _bodyScreens => [
+    const DashboardScreen(),
+    const InventoryScreen(),
+    const SettingsScreen(),
+    if (kWishlistEnabled)  const WishlistScreen(),
+    if (kCommunityEnabled) const CommunityFeedScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: IndexedStack(index: _tab, children: _bodyScreens),
+      bottomNavigationBar: _BottomNav(
+        current: _tab,
+        onScan: () => Navigator.push(context,
+            BrikPageRoute(page: const ScannerScreen())),
+        onTab: (i) => setState(() => _tab = i),
+      ),
+      floatingActionButton: _tab == 1
+          ? FloatingActionButton(
+              heroTag: 'wishlist_fab',
+              onPressed: () => Navigator.push(context,
+                  BrikPageRoute(page: const AddSetScreen())),
+              backgroundColor: BT.yellow,
+              foregroundColor: BT.ink,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: const BorderSide(color: BT.ink, width: BT.bw),
+              ),
+              elevation: 0,
+              child: const Icon(Icons.add, size: 26),
+            )
+          : null,
+    );
+  }
+}
+
+class _BottomNav extends StatelessWidget {
+  final int current;
+  final VoidCallback onScan;
+  final void Function(int) onTab;
+  const _BottomNav({
+    required this.current,
+    required this.onScan,
+    required this.onTab,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bt = context.bt;
+    return Container(
+      height: 68 + MediaQuery.of(context).padding.bottom,
+      decoration: BoxDecoration(
+        color: bt.navBg,
+        border: Border(top: BorderSide(color: bt.cardBorder, width: BT.bw)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).padding.bottom),
+        child: Row(children: [
+          _btn(context, Icons.grid_view_outlined, Icons.grid_view, 'Home',
+              active: current == 0, onTap: () => onTab(0)),
+          _btn(context, Icons.inventory_2_outlined, Icons.inventory_2, 'Sets',
+              active: current == 1, onTap: () => onTab(1)),
+
+          // Scan — centre action, opens modal
+          Expanded(child: GestureDetector(
+            onTap: onScan,
+            behavior: HitTestBehavior.opaque,
+            child: Column(
+                mainAxisAlignment: MainAxisAlignment.center, children: [
+              Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(Icons.qr_code_scanner,
+                    color: bt.navInactive, size: 22),
+              ),
+              const SizedBox(height: 2),
+              Text('Scan',
+                  style: BT.mono(size: 8, color: bt.navInactive)),
+            ]),
+          )),
+
+          if (kCommunityEnabled)
+            _btn(context, Icons.photo_library_outlined, Icons.photo_library,
+                'Community',
+                active: current == 4, onTap: () => onTab(4)),
+
+          if (kWishlistEnabled)
+            _btn(context, Icons.favorite_border, Icons.favorite, 'Wishlist',
+                active: current == 3, onTap: () => onTab(3)),
+
+          _btn(context, Icons.settings_outlined, Icons.settings, 'Settings',
+              active: current == 2, onTap: () => onTab(2)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _btn(BuildContext context, IconData icon, IconData activeIcon,
+      String label,
+      {required bool active, required VoidCallback onTap}) {
+    final bt = context.bt;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+            mainAxisAlignment: MainAxisAlignment.center, children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 46, height: 46,
+            decoration: BoxDecoration(
+              color: active ? bt.primary : Colors.transparent,
+              borderRadius: BorderRadius.circular(13),
+              border: active
+                  ? Border.all(color: bt.cardBorder, width: BT.bw)
+                  : null,
+            ),
+            child: Icon(active ? activeIcon : icon,
+                color: active ? bt.navBg : bt.navInactive, size: 22),
+          ),
+          const SizedBox(height: 2),
+          Text(label,
+              style: BT.mono(size: 8,
+                  color: active ? bt.navActive : bt.navInactive,
+                  weight: active
+                      ? FontWeight.w500 : FontWeight.w400)),
+        ]),
+      ),
+    );
+  }
+}

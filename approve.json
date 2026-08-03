@@ -1,0 +1,1 @@
+{"name":"approve","description":"Approve a pending community post","options":[{"name":"id","description":"Post ID to approve","type":4,"required":true}]}

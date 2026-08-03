@@ -1,0 +1,9 @@
+{
+  "name": "update",
+  "description": "Post a BrikStax version update (app and website)",
+  "options": [
+    { "name": "title",   "description": "What is new",           "type": 3, "required": true  },
+    { "name": "summary", "description": "Details of the update", "type": 3, "required": false },
+    { "name": "version", "description": "Version e.g. v2.1.2",   "type": 3, "required": false }
+  ]
+}
