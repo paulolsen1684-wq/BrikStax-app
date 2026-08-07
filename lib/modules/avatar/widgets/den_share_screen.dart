@@ -10,7 +10,6 @@
 // depend on brick_den.dart internals. Captures via RepaintBoundary and shares
 // with share_plus (XFile.fromData — no path_provider needed).
 
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -83,7 +82,7 @@ class _State extends State<DenShareScreen> {
     final svc = AchievementService.instance;
     final col = context.watch<CollectionProvider>();
     final state = svc.state;
-    final earned = state.earnedIds as Set<String>;
+    final earned = state.earnedIds;
 
     final sorted = [...col.sets]
       ..sort((a, b) => ((b.ebayAvg ?? 0) as num)

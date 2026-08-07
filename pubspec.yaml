@@ -1,7 +1,7 @@
 name: brikstax
 description: BrikStax — LEGO Collection Tracker with eBay price tracking
 publish_to: none
-version: 2.1.6+7
+version: 2.2.0+8
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -19,6 +19,12 @@ dependencies:
   path: ^1.9.0
   # Network
   http: ^1.2.0
+  # community_service.dart uses MediaType from this directly (multipart
+  # photo submission uploads) -- was only resolving as a transitive dep of
+  # some other package, which the analyzer flags as fragile: if that other
+  # package ever drops its own dependency on http_parser, this import
+  # breaks with no warning until it happens. Declared explicitly instead.
+  http_parser: ^4.1.2
   # Scanner
   mobile_scanner: ^7.0.0
   image_picker: ^1.1.2
@@ -38,6 +44,20 @@ dependencies:
   image_cropper: ^8.0.2
   sentry_flutter: ^8.14.2
   package_info_plus: ^9.0.1
+  app_links: ^7.2.1
+
+  # Push notifications (Firebase Cloud Messaging). Dev-gated for now (see
+  # push_service.dart) -- Android only until an iOS Firebase app + APNs key
+  # exist. firebase_core must come before firebase_messaging in every
+  # Firebase.initializeApp() call site, same requirement as any other
+  # Firebase package.
+  # Pinned to the last major line before FlutterFire's web plugins moved to
+  # package:web ^1.0.0 -- share_plus 9.0.0 (already a dependency here) pins
+  # web ^0.5.0, same conflict CLAUDE.md documents for the sentry_flutter 9.x
+  # upgrade path being blocked for the same reason. Bump both together if
+  # share_plus is ever majored up past this.
+  firebase_core: ^2.32.0
+  firebase_messaging: ^14.9.4
 
 flutter_native_splash:
   color: "#0A0907"

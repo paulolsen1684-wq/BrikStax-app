@@ -26,14 +26,19 @@ class CommunityService extends ChangeNotifier {
   bool                 get loading => _loading;
   String?              get error   => _error;
 
-  /// Fetch the public feed — approved posts only.
-  Future<void> fetchFeed({int limit = 20}) async {
+  /// Fetch the public feed — approved posts only. [userId] is optional but
+  /// should always be passed by real call sites (DeviceIdentity.instance.id)
+  /// so each post comes back knowing whether THIS device already liked it —
+  /// omitting it just means every post renders with an outline (unliked)
+  /// heart regardless of actual state.
+  Future<void> fetchFeed({int limit = 20, String? userId}) async {
     _loading = true;
     _error   = null;
     notifyListeners();
 
     try {
-      final uri = Uri.parse('$_baseUrl/community/feed?limit=$limit');
+      final uri = Uri.parse('$_baseUrl/community/feed?limit=$limit'
+          '${userId != null ? '&user_id=${Uri.encodeComponent(userId)}' : ''}');
       final res = await http.get(uri).timeout(const Duration(seconds: 10));
       if (res.statusCode != 200) {
         throw Exception('Feed error ${res.statusCode}');
@@ -49,6 +54,59 @@ class CommunityService extends ChangeNotifier {
 
     _loading = false;
     notifyListeners();
+  }
+
+  /// Toggle a like on [postId] for [userId]. Updates the matching post in
+  /// [_feed] in place (optimistic-ish -- waits for the real response rather
+  /// than guessing the new count, but doesn't require a full fetchFeed()
+  /// round-trip to reflect the change). Silently no-ops on failure, same
+  /// "never let a background network hiccup surface as an error state"
+  /// philosophy as the rest of this service.
+  Future<void> toggleLike(int postId, String userId) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/community/like');
+      final res = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'post_id': postId, 'user_id': userId}),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return;
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final liked = data['liked'] as bool? ?? false;
+      final count = data['likeCount'] as int? ?? 0;
+
+      final idx = _feed.indexWhere((p) => p.id == postId);
+      if (idx >= 0) {
+        _feed[idx] = _feed[idx].copyWithLike(liked: liked, likeCount: count);
+        notifyListeners();
+      }
+    } catch (_) {
+      // Network hiccup — the heart just doesn't update this time; the next
+      // fetchFeed() will resync to the real server state either way.
+    }
+  }
+
+  /// Pulls any Brik rewards accrued from likes on this user's own posts
+  /// since the last claim and returns how many were earned (0 if none).
+  /// Callers are responsible for actually crediting the local Briks wallet
+  /// (LootService.instance.addBriks) -- this service only talks to the
+  /// Worker, it doesn't know about LootService, same layering as everywhere
+  /// else Briks get granted from outside the avatar module.
+  Future<int> claimRewards(String userId) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/community/claim-rewards');
+      final res = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'user_id': userId}),
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return 0;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return data['briksEarned'] as int? ?? 0;
+    } catch (_) {
+      return 0;
+    }
   }
 
   Future<Duration> cooldownRemaining() async {

@@ -97,10 +97,15 @@ class DealsService {
     }
   }
 
-  /// The single featured "Deal of the Day" (first featured, else first deal).
-  Future<Deal?> featured() async {
+  /// Deal of the Day = whichever live deal was posted most recently. Used
+  /// to prioritize `featured` first (server-sorted that way), which meant a
+  /// deal marked featured could bury a newer post indefinitely -- per user
+  /// feedback, "most recent" is simpler and more predictable, so this now
+  /// just takes the list's first entry (server sorts by created_at DESC).
+  /// `featured` is still in the model/API for deal_history_screen.dart's
+  /// badge, it just no longer affects which one shows here.
+  Future<Deal?> latest() async {
     final all = await fetch();
-    if (all.isEmpty) return null;
-    return all.firstWhere((d) => d.featured, orElse: () => all.first);
+    return all.isEmpty ? null : all.first;
   }
 }

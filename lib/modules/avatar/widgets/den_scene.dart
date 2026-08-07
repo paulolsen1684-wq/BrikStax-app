@@ -17,6 +17,8 @@ import 'avatar_widget.dart';
 import '../data/backgrounds_art.dart' as bgArt;
 import 'den_hud.dart';
 import 'ground_accessory.dart';
+import '../../../services/den_screenshot_service.dart';
+import '../../../services/widget_service.dart';
 
 // ── Trophy families ───────────────────────────────────────────────────────────
 class _TrophyFamily {
@@ -117,6 +119,15 @@ class _DenSceneContentState extends State<DenSceneContent>
   // CollectionProvider directly rather than accepting props.
   int _lastSeenTuningGen = DenLayoutTuning.generation;
 
+  // Screenshot capture for the home-screen widget. Was previously only
+  // wired up in brick_den.dart's BrickDenScreen, which meant opening the
+  // Den via avatar_editor.dart's Den tab instead (an equally common path,
+  // and the same live scene) never captured anything -- the widget was
+  // stuck on its generic fallback for anyone who never happened to visit
+  // BrickDenScreen specifically. Living here instead means BOTH embeddings
+  // trigger it for free, since this is the one widget they both wrap.
+  final _repaintKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +136,13 @@ class _DenSceneContentState extends State<DenSceneContent>
         duration: const Duration(milliseconds: 1800))
       ..addListener(_onTick)
       ..repeat();
+    DenScreenshotService.instance.registerDenKey(_repaintKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _captureForWidget());
+  }
+
+  Future<void> _captureForWidget() async {
+    final path = await DenScreenshotService.instance.captureDen();
+    if (path != null) await WidgetService.instance.updateDenWidget();
   }
 
   void _onTick() {
@@ -159,11 +177,13 @@ class _DenSceneContentState extends State<DenSceneContent>
     // comment for the row-43-grounding rationale.
     final avatarRect = denAvatarRect(pxd);
 
-    return ListenableBuilder(
+    return RepaintBoundary(
+      key: _repaintKey,
+      child: ListenableBuilder(
       listenable: svc,
       builder: (_, __) {
         final state  = svc.state;
-        final earned = state.earnedIds as Set<String>;
+        final earned = state.earnedIds;
 
         final sorted = [...col.sets]
           ..sort((a, b) => ((b.ebayAvg ?? 0) as num)
@@ -229,7 +249,7 @@ class _DenSceneContentState extends State<DenSceneContent>
                     children: [
                       SizedBox(
                         width: width * .22,
-                        child: Text(s.name ?? '',
+                        child: Text(s.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.right,
@@ -370,6 +390,7 @@ class _DenSceneContentState extends State<DenSceneContent>
           ),
         ]));
       },
+      ),
     );
   }
 }

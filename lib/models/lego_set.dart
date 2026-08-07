@@ -1,5 +1,4 @@
 // lib/models/lego_set.dart
-import 'dart:convert';
 import 'package:flutter/material.dart' show Color;
 import '../services/constants.dart';
 

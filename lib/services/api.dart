@@ -1,7 +1,6 @@
 // lib/services/api.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../models/lego_set.dart';
 import 'constants.dart';
 import 'storage.dart';
 
@@ -25,10 +24,6 @@ class Api {
       return null;
     }
   }
-
-  /// Route a URL through the Cloudflare Worker proxy
-  Uri _proxy(String targetUrl) => Uri.parse(
-      '${K.workerUrl}?url=${Uri.encodeComponent(targetUrl)}');
 
   // ── Rebrickable ────────────────────────────────────────────────────────────
 
@@ -193,8 +188,8 @@ class Api {
       double? retail;
       final lego = set0['LEGOCom'] as Map?;
       final us   = lego?['US'] ?? lego?['us'];
-      final p    = (us as Map?)?['retailPrice'] ?? (us as Map?)?['RetailPrice'];
-      if (p != null) retail = (p as dynamic).toDouble();
+      final p    = (us as Map?)?['retailPrice'] ?? us?['RetailPrice'];
+      if (p != null) retail = p.toDouble();
 
       DateTime? exitDate;
       final exitRaw = set0['exitDate'] as String?;

@@ -9,6 +9,7 @@ import '../services/storage.dart';
 import '../modules/avatar/services/dev_mode.dart';
 import '../modules/avatar/services/secret_item_service.dart';
 import '../services/widget_service.dart';
+import '../services/verified.dart';
 
 enum RefreshState { idle, running, done }
 
@@ -108,6 +109,13 @@ class CollectionProvider extends ChangeNotifier {
     OpenExtras       openExtras      = const OpenExtras(),
     PurchaseSource   purchaseSource  = PurchaseSource.other,
     double?          insiderPointsOverride,
+    // Null (the default) defers to manualEntryDefaultVerified -- true while
+    // kScannerLive is false (every entry trusted), false once it's on
+    // (manual entries need a human to vouch for them). Pass true explicitly
+    // for a set that actually came off a real barcode scan (see
+    // scanner.dart's AddSetScreen(fromScan: true) hop) so it's verified
+    // regardless of how manual entries are being treated.
+    bool?            verified,
     }) async {
       if (await DevMode.instance.handleMagicId(num)) {
         return LegoSet(id: 'devmode', num: num, name: 'dev', addedAt: DateTime.now());
@@ -137,6 +145,7 @@ class CollectionProvider extends ChangeNotifier {
       openExtras:           openExtras,
       purchaseSource:       purchaseSource,
       insiderPointsOverride:insiderPointsOverride,
+      verified:             verified ?? manualEntryDefaultVerified,
       addedAt:              DateTime.now(),
     );
     _sets.insert(0, set);

@@ -501,7 +501,7 @@ class _State extends State<DailyFiveScreen> {
               ),
             const SizedBox(height: 10),
             Text(
-              s.name?.isNotEmpty == true ? s.name! : 'Set ${s.num}',
+              s.name.isNotEmpty ? s.name : 'Set ${s.num}',
               style: BT.display(size: 16, color: bt.tx),
             ),
             const SizedBox(height: 4),

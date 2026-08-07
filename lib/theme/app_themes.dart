@@ -1,7 +1,5 @@
 // lib/theme/app_themes.dart — BrikStax Theme System
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // ── Theme IDs ─────────────────────────────────────────────────────────────────
 enum BrikTheme {

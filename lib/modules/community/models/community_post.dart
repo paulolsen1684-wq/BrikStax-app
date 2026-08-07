@@ -6,6 +6,8 @@ class CommunityPost {
   final String?  caption;
   final String?  setNum;
   final int      submittedAt;
+  final int      likeCount;
+  final bool     likedByMe;
 
   const CommunityPost({
     required this.id,
@@ -14,6 +16,8 @@ class CommunityPost {
     this.caption,
     this.setNum,
     required this.submittedAt,
+    this.likeCount = 0,
+    this.likedByMe = false,
   });
 
   factory CommunityPost.fromJson(Map<String, dynamic> json) => CommunityPost(
@@ -23,7 +27,19 @@ class CommunityPost {
     caption:     json['caption'] as String?,
     setNum:      json['setNum'] as String?,
     submittedAt: json['submittedAt'] as int,
+    likeCount:   json['likeCount'] as int? ?? 0,
+    likedByMe:   json['likedByMe'] as bool? ?? false,
   );
+
+  /// Local-only optimistic update after a like/unlike tap -- the real
+  /// source of truth is still whatever the Worker returns, this just avoids
+  /// waiting on a round-trip before the heart/count visibly react.
+  CommunityPost copyWithLike({required bool liked, required int likeCount}) =>
+      CommunityPost(
+        id: id, userId: userId, imageUrl: imageUrl, caption: caption,
+        setNum: setNum, submittedAt: submittedAt,
+        likeCount: likeCount, likedByMe: liked,
+      );
 
   DateTime get submittedAtDate =>
       DateTime.fromMillisecondsSinceEpoch(submittedAt);

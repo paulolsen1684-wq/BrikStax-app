@@ -5,7 +5,6 @@ import '../models/lego_set.dart';
 import '../providers/collection.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
-import '../widgets/atoms.dart';
 import '../widgets/set_card.dart';
 import 'add_set.dart';
 import 'set_detail.dart';

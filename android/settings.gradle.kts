@@ -21,6 +21,10 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "9.0.1" apply false
     id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+    // Push notifications (Firebase Cloud Messaging) -- dev-gated for now,
+    // see push_service.dart. Version per Firebase Console's own setup
+    // instructions as of 2026-08-06.
+    id("com.google.gms.google-services") version "4.5.0" apply false
 }
 
 include(":app")

@@ -24,7 +24,7 @@ class _State extends State<DealOfDayCard> {
   }
 
   Future<void> _load() async {
-    final d = await DealsService.instance.featured();
+    final d = await DealsService.instance.latest();
     if (mounted) setState(() { _deal = d; _loaded = true; });
   }
 

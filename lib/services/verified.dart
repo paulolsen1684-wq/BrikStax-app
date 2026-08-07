@@ -8,10 +8,11 @@
 // entries become unverified. No data migration needed.
 import '../models/lego_set.dart';
 
-/// Master switch. Flip to true when barcode scanning goes live (~500 seeded
-/// barcodes). While false, verified-gating is effectively a no-op because
-/// everything is verified.
-const bool kScannerLive = false;
+/// Master switch. Flipped true 2026-08-07 -- barcode DB well past the ~500
+/// seeded threshold (2,991+ as of the last check) and FEATURE_SCANNER is
+/// live server-side. Scheduled for the next app build/store submission,
+/// not a remote flag like FEATURE_SCANNER -- this is compiled in.
+const bool kScannerLive = true;
 
 /// Whether a brand-new MANUAL entry should be considered verified.
 /// Before the scanner is live, manual entries are trusted (true).
