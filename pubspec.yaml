@@ -51,13 +51,12 @@ dependencies:
   # exist. firebase_core must come before firebase_messaging in every
   # Firebase.initializeApp() call site, same requirement as any other
   # Firebase package.
-  # Pinned to the last major line before FlutterFire's web plugins moved to
-  # package:web ^1.0.0 -- share_plus 9.0.0 (already a dependency here) pins
-  # web ^0.5.0, same conflict CLAUDE.md documents for the sentry_flutter 9.x
-  # upgrade path being blocked for the same reason. Bump both together if
-  # share_plus is ever majored up past this.
-  firebase_core: ^2.32.0
-  firebase_messaging: ^14.9.4
+  # Was pinned to the last major line before FlutterFire's web plugins moved
+  # to package:web ^1.0.0, since share_plus 9.0.0 (then a dependency here)
+  # pinned web ^0.5.0 -- share_plus is now ^12.0.2 (needs web ^1.0.0 itself),
+  # so that conflict no longer applies and these can track current.
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.5
 
 flutter_native_splash:
   color: "#0A0907"
