@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "781567937733",
+    "project_id": "brikstax",
+    "storage_bucket": "brikstax.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:781567937733:android:6e460a8277e8b077a7f4ac",
+        "android_client_info": {
+          "package_name": "com.brixstax.android"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAu8yBM64haK1MJ9_KX_sxQA3sOxwZw4fQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

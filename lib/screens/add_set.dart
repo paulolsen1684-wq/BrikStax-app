@@ -14,7 +14,13 @@ import '../widgets/sheets.dart';
 class AddSetScreen extends StatefulWidget {
   final String?               initialNum;
   final Map<String, dynamic>? prefill;
-  const AddSetScreen({super.key, this.initialNum, this.prefill});
+  /// True when this screen was reached from a real barcode scan
+  /// (scanner.dart's Inventory mode) rather than typed in by hand -- gets
+  /// passed through to CollectionProvider.addSet's verified param so a
+  /// scanned set is trusted regardless of how manual entries are being
+  /// treated (see verified.dart's kScannerLive/manualEntryDefaultVerified).
+  final bool                  fromScan;
+  const AddSetScreen({super.key, this.initialNum, this.prefill, this.fromScan = false});
   @override State<AddSetScreen> createState() => _State();
 }
 
@@ -113,6 +119,7 @@ class _State extends State<AddSetScreen> {
       exitDate:       _exitDate,
       openExtras:     _extras,
       purchaseSource: _source,
+      verified:       widget.fromScan ? true : null,
     );
     if (!mounted) return;
     // A secret-code match returns a marker LegoSet (see

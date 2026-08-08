@@ -5,8 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'modules/avatar/avatar_module.dart';
-import 'modules/avatar/services/achievement_service.dart';
-import 'modules/avatar/services/loot_service.dart';
 import 'modules/avatar/services/hidden_theme_service.dart';
 import 'modules/avatar/services/dev_mode.dart';
 import 'modules/avatar/services/daily_five_service.dart';
@@ -22,11 +20,14 @@ import 'screens/settings.dart';
 import 'screens/add_set.dart';
 import 'screens/wishlist_screen.dart';
 import 'screens/community_feed_screen.dart';
+import 'screens/set_lookup_screen.dart';
+import 'screens/set_detail.dart';
 import 'theme/app_theme.dart';
 import 'services/theme_service.dart';
 import 'theme/app_themes.dart';
 import 'utils/brik_page_route.dart';
 import 'services/widget_service.dart';
+import 'services/deep_link_service.dart';
 
 /// Flip to false to hide the Wishlist tab everywhere. Single source of truth.
 const bool kWishlistEnabled = true;
@@ -105,6 +106,39 @@ class _ShellState extends State<_Shell> {
   void initState() {
     super.initState();
     _checkWidgetLaunch();
+    _initDeepLinks();
+  }
+
+  /// Initialize deep link listener for ongoing widget navigation during app lifetime.
+  void _initDeepLinks() {
+    DeepLinkService.instance.init(
+      onScan: _goToScanner,
+      onLookup: _goToSetLookup,
+      onSetDetail: _goToSetDetail,
+    );
+  }
+
+  void _goToScanner() {
+    if (mounted) {
+      Navigator.push(context, BrikPageRoute(page: const ScannerScreen()));
+    }
+  }
+
+  void _goToSetLookup() {
+    if (mounted) {
+      Navigator.push(context, BrikPageRoute(page: const SetLookupScreen()));
+    }
+  }
+
+  void _goToSetDetail(String setNum) {
+    if (mounted) {
+      final collection = context.read<CollectionProvider>();
+      final sets = collection.sets.where((s) => s.num == setNum).toList();
+      final screen = sets.isNotEmpty
+          ? SetDetailScreen(setId: sets.first.id)
+          : const DashboardScreen();
+      Navigator.push(context, BrikPageRoute(page: screen));
+    }
   }
 
   // If the app was opened via the home screen widget's "Scan" button
@@ -112,12 +146,27 @@ class _ShellState extends State<_Shell> {
   // on the normal Dashboard start.
   Future<void> _checkWidgetLaunch() async {
     final fromScanWidget = await WidgetService.instance.launchedFromScanWidget();
-    if (fromScanWidget && mounted) {
+    final fromLookupWidget = await WidgetService.instance.launchedFromLookupWidget();
+    final setNum = await WidgetService.instance.launchedFromSetWidget();
+
+    if ((fromScanWidget || fromLookupWidget || setNum != null) && mounted) {
       // Wait for the first frame so Navigator/context are fully ready.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          Navigator.push(context,
-              BrikPageRoute(page: const ScannerScreen()));
+          Widget screen;
+          if (fromScanWidget) {
+            screen = const ScannerScreen();
+          } else if (fromLookupWidget) {
+            screen = const SetLookupScreen();
+          } else {
+            // setNum is not null — find the set in the collection by number
+            final collection = context.read<CollectionProvider>();
+            final sets = collection.sets.where((s) => s.num == setNum).toList();
+            screen = sets.isNotEmpty
+                ? SetDetailScreen(setId: sets.first.id)
+                : const DashboardScreen();
+          }
+          Navigator.push(context, BrikPageRoute(page: screen));
         }
       });
     }

@@ -4,6 +4,14 @@ import java.io.FileInputStream
 plugins {
     id("com.android.application")
     id("dev.flutter.flutter-gradle-plugin")
+    // Push notifications (Firebase Cloud Messaging) -- reads
+    // google-services.json below. Native Firebase dependencies come
+    // transitively through the firebase_core/firebase_messaging pub
+    // packages (see pubspec.yaml), not hand-added here -- that's the normal
+    // Flutter pattern, unlike a pure-native Android app where you'd list
+    // firebase-bom/firebase-analytics etc. directly in this file's own
+    // dependencies block.
+    id("com.google.gms.google-services")
 }
 
 val keystoreProperties = Properties()

@@ -49,4 +49,68 @@ class WidgetService {
       return false;
     }
   }
+
+  /// Call once at app startup to check if the app was launched via the
+  /// Set Lookup widget (brikstax://lookup). Returns true if so — the
+  /// caller should navigate straight to SetLookupScreen in that case.
+  Future<bool> launchedFromLookupWidget() async {
+    try {
+      final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      return uri?.host == 'lookup';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Call once at app startup to check if the app was launched from the
+  /// Random Set widget (brikstax://set/12345). Returns the set number if so,
+  /// or null otherwise — the caller should navigate to SetDetailScreen with
+  /// that set number in that case.
+  Future<String?> launchedFromSetWidget() async {
+    try {
+      final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      if (uri?.host == 'set') return uri?.pathSegments.lastOrNull;
+    } catch (_) {}
+    return null;
+  }
+
+  /// Update the Random Set widget with data for a random owned set.
+  /// Called from CollectionProvider whenever the collection changes,
+  /// to keep the widget data fresh.
+  Future<void> updateRandomSetWidget({
+    required String setName,
+    required String setNum,
+    required String setYear,
+    required String pieces,
+    required String retail,
+    required String sealedValue,
+  }) async {
+    try {
+      await HomeWidget.saveWidgetData<String>('random_set_name', setName);
+      await HomeWidget.saveWidgetData<String>('random_set_num', setNum);
+      await HomeWidget.saveWidgetData<String>('random_set_year', setYear);
+      await HomeWidget.saveWidgetData<String>('random_set_pieces', pieces);
+      await HomeWidget.saveWidgetData<String>('random_set_retail', retail);
+      await HomeWidget.saveWidgetData<String>('random_set_sealed', sealedValue);
+      await HomeWidget.updateWidget(
+        name: 'RandomSetWidgetProvider',
+        androidName: 'RandomSetWidgetProvider',
+      );
+    } catch (_) {
+      // Widget update failing should never crash the app.
+    }
+  }
+
+  /// Trigger the Avatar/Den widget to refresh from cached den screenshot.
+  /// Call this after capturing a den screenshot via DenScreenshotService.
+  Future<void> updateDenWidget() async {
+    try {
+      await HomeWidget.updateWidget(
+        name: 'AvatarDenWidgetProvider',
+        androidName: 'AvatarDenWidgetProvider',
+      );
+    } catch (_) {
+      // Widget update failing should never crash the app.
+    }
+  }
 }

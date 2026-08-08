@@ -14,6 +14,10 @@ import '../modules/avatar/services/dev_mode.dart';
 import '../modules/avatar/widgets/pixel_avatar_preview_screen.dart';
 import '../modules/avatar/widgets/pixel_item_tuner_screen.dart';
 import '../modules/avatar/widgets/den_layout_tuner_screen.dart';
+import 'push_test_screen.dart';
+import 'deal_history_screen.dart';
+import '../services/push_service.dart';
+import '../services/device_identity.dart';
 import 'package:http/http.dart' as http;
 
 class SettingsScreen extends StatefulWidget {
@@ -75,6 +79,30 @@ class _State extends State<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const ThemePickerScreen())),
           ),
 
+          // ── Deals ────────────────────────────────────────────────────────
+          // Every deal posted via Discord's /deal etc. lives on the server,
+          // but DealOfDayCard only ever surfaces the single most recent one
+          // -- this is the only place the rest are actually visible.
+          _header(bt, 'Deals'),
+          _tile(bt,
+            icon: Icons.local_offer_outlined, bg: const Color(0xFFE1F5EE),
+            iconColor: BT.green,
+            title: 'Deal History',
+            sub: 'Every live deal, not just today\'s featured one',
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const DealHistoryScreen())),
+          ),
+
+          // ── Notifications ────────────────────────────────────────────────
+          // Real feature UI (not a raw test screen), but still dev-gated
+          // for now -- see push_service.dart's header comment. Once ready
+          // for everyone, this whole `if` just gets removed; nothing about
+          // the widget itself needs to change.
+          if (DevMode.instance.isOn) ...[
+            _header(bt, 'Notifications'),
+            const SliverToBoxAdapter(child: _NotificationsOptIn()),
+          ],
+
           // ── eBay ─────────────────────────────────────────────────────────
           _header(bt, 'eBay Prices'),
           _tile(bt,
@@ -124,6 +152,14 @@ class _State extends State<SettingsScreen> {
               sub: 'Drag/pinch the avatar and item placement in the Den',
               onTap: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => const DenLayoutTunerScreen())),
+            ),
+            _tile(bt,
+              icon: Icons.notifications_active_outlined, bg: bt.surface2,
+              iconColor: bt.tx2,
+              title: 'Push Notifications (Dev)',
+              sub: 'FCM token + registration test — Android only, not sending yet',
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const PushTestScreen())),
             ),
           ],
 
@@ -653,6 +689,74 @@ class _State extends State<SettingsScreen> {
           ),
         ),
       );
+}
+
+// ── Push notification opt-in (dev-gated for now) ───────────────────────────
+// Real toggle UI: requests the OS permission, subscribes the device to the
+// "all_users" broadcast topic, and registers the token with the Worker --
+// same underlying pieces push_test_screen.dart exercises individually for
+// debugging, wired together here as the actual one-tap flow a real user
+// would see once this ships past dev-only.
+class _NotificationsOptIn extends StatefulWidget {
+  const _NotificationsOptIn();
+  @override State<_NotificationsOptIn> createState() => _NotificationsOptInState();
+}
+
+class _NotificationsOptInState extends State<_NotificationsOptIn> {
+  final _svc = PushService.instance;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _svc.addListener(_onChange);
+    // Silently restores a previous opt-in (if any) without re-prompting --
+    // see PushService.restoreIfOptedIn's own doc comment.
+    _svc.restoreIfOptedIn(DeviceIdentity.instance.id);
+  }
+
+  @override
+  void dispose() {
+    _svc.removeListener(_onChange);
+    super.dispose();
+  }
+
+  void _onChange() { if (mounted) setState(() {}); }
+
+  Future<void> _toggle(bool value) async {
+    setState(() => _busy = true);
+    await _svc.setOptedIn(value, userId: DeviceIdentity.instance.id);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bt = context.bt;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: bt.cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: bt.cardBorder, width: BT.bw),
+        ),
+        child: SwitchListTile(
+          activeColor: BT.green,
+          title: Text('Push Notifications',
+              style: BT.body(size: 14, weight: FontWeight.w700, color: bt.tx)),
+          subtitle: Text(
+            _svc.optedIn
+                ? 'On — you\'ll get restock, price, and other BrikStax alerts.'
+                : 'Get notified about restocks, price drops, and other alerts.',
+            style: BT.mono(size: 9, color: bt.tx3),
+          ),
+          value: _svc.optedIn,
+          onChanged: _busy ? null : _toggle,
+        ),
+      ),
+    );
+  }
 }
 
 // ── Dev-mode-only eBay API usage counter ──────────────────────────────────────

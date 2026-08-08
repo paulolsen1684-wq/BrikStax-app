@@ -45,7 +45,6 @@ class _State extends State<DealCheckScreen> with TickerProviderStateMixin {
   bool _looking = false;
   bool _found   = false;
   double? _retail;
-  Map<String, dynamic>? _lookupData;
 
   // Result state
   bool _showResult = false;
@@ -91,7 +90,6 @@ class _State extends State<DealCheckScreen> with TickerProviderStateMixin {
     setState(() {
       _looking = false;
       if (d != null) {
-        _lookupData = d;
         _found = true;
         final name = d['name'] as String? ?? '';
         if (name.isNotEmpty && _nameCtrl.text.trim().isEmpty) {

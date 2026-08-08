@@ -10,6 +10,7 @@ import '../widgets/skeleton_loader.dart';
 import '../modules/community/models/community_post.dart';
 import '../modules/community/services/community_service.dart';
 import '../modules/avatar/services/dev_mode.dart';
+import '../modules/avatar/services/loot_service.dart';
 import '../services/feature_flag_service.dart';
 import '../services/device_identity.dart';
 import '../utils/image_privacy.dart';
@@ -112,7 +113,25 @@ class _CommunityFeedBodyState extends State<_CommunityFeedBody> {
   @override
   void initState() {
     super.initState();
-    _svc.fetchFeed();
+    _svc.fetchFeed(userId: DeviceIdentity.instance.id);
+    _claimRewards();
+  }
+
+  // Pull any Brik rewards accrued from likes on this user's own posts since
+  // the last time the Community tab was opened, credit the local wallet,
+  // and let them know. Silent (no snackbar) when there's nothing new --
+  // this fires on every visit to the tab, not just once, so staying quiet
+  // on a 0 result matters.
+  Future<void> _claimRewards() async {
+    final earned = await _svc.claimRewards(DeviceIdentity.instance.id);
+    if (earned <= 0 || !mounted) return;
+    await LootService.instance.addBriks(earned);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('🧱 +$earned Brik${earned == 1 ? '' : 's'} from likes on your posts!',
+          style: BT.body(size: 13, color: BT.ink, weight: FontWeight.w700)),
+      backgroundColor: BT.yellow,
+    ));
   }
 
   @override
@@ -149,6 +168,9 @@ class _CommunityFeedBodyState extends State<_CommunityFeedBody> {
             ]),
           ),
         ),
+
+        if (FeatureFlagService.instance.communityBanner != null)
+          _BannerNotice(text: FeatureFlagService.instance.communityBanner!),
 
         Expanded(
           child: ListenableBuilder(
@@ -237,6 +259,39 @@ class _CommunityFeedBodyState extends State<_CommunityFeedBody> {
   }
 }
 
+// ── Remote moderation/warning banner ────────────────────────────────────────
+// Driven by FeatureFlagService.communityBanner (COMMUNITY_BANNER on the
+// Worker) -- persistent, not dismissible, so a real warning stays visible
+// the whole time someone browses the feed rather than scrolling away with
+// the rest of the content. Text-only by design (no severity/color levels
+// yet); revisit if a softer "heads up" tone is ever needed alongside actual
+// warnings.
+class _BannerNotice extends StatelessWidget {
+  final String text;
+  const _BannerNotice({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final bt = context.bt;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3CD),
+        border: Border(bottom: BorderSide(color: bt.cardBorder, width: BT.bw)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Icon(Icons.warning_amber_rounded, color: Color(0xFF8A6D00), size: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              style: BT.body(size: 12, color: const Color(0xFF6B5400), weight: FontWeight.w600)),
+        ),
+      ]),
+    );
+  }
+}
+
 // ── Post card ──────────────────────────────────────────────────────────────
 class _PostCard extends StatelessWidget {
   final CommunityPost  post;
@@ -297,10 +352,27 @@ class _PostCard extends StatelessWidget {
       ),
       if (post.caption != null && post.caption!.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           child: Text(post.caption!,
               style: BT.body(size: 13, color: bt.tx2)),
         ),
+      Padding(
+        padding: const EdgeInsets.all(12),
+        child: GestureDetector(
+          onTap: () => CommunityService.instance
+              .toggleLike(post.id, DeviceIdentity.instance.id),
+          child: Row(children: [
+            Icon(
+              post.likedByMe ? Icons.favorite : Icons.favorite_border,
+              size: 18,
+              color: post.likedByMe ? BT.red : bt.txMuted,
+            ),
+            const SizedBox(width: 5),
+            Text('${post.likeCount}',
+                style: BT.mono(size: 11, color: post.likedByMe ? BT.red : bt.tx3)),
+          ]),
+        ),
+      ),
     ]),
   );
 }

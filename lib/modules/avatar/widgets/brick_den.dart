@@ -5,15 +5,27 @@
 // which this screen just embeds. That split exists so the Avatar Editor's
 // Den tab can embed the exact same scene without a second full-Scaffold
 // screen nested inside a TabBarView.
+//
+// Home-widget screenshot capture used to be wired up here (RepaintBoundary
+// + DenScreenshotService), but that meant only THIS screen ever captured
+// one -- avatar_editor.dart's Den tab embeds the exact same DenSceneContent
+// without going through here, so the widget stayed on its generic fallback
+// for anyone who viewed their Den that way instead. Moved into
+// DenSceneContent itself so both embeddings trigger it.
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/app_themes.dart';
 import 'den_scene.dart';
 import 'den_share_screen.dart';
 
-class BrickDenScreen extends StatelessWidget {
+class BrickDenScreen extends StatefulWidget {
   const BrickDenScreen({super.key});
 
+  @override
+  State<BrickDenScreen> createState() => _BrickDenScreenState();
+}
+
+class _BrickDenScreenState extends State<BrickDenScreen> {
   @override
   Widget build(BuildContext context) {
     final bt = context.bt;
@@ -78,7 +90,9 @@ class BrickDenScreen extends StatelessWidget {
           ),
         ),
 
-        const Expanded(child: DenSceneContent()),
+        Expanded(
+          child: const DenSceneContent(),
+        ),
       ]),
     );
   }

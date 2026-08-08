@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/res/layout/avatar_den_widget.xml -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background">
+
+    <!-- Den background image (if cached screenshot exists) -->
+    <ImageView
+        android:id="@+id/den_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <!-- Fallback: Avatar preview with den colors -->
+    <LinearLayout
+        android:id="@+id/fallback_preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:gravity="center"
+        android:background="#1a1a1a">
+
+        <!-- Large avatar emoji -->
+        <TextView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:text="🏠"
+            android:textSize="40sp"
+            android:gravity="center" />
+
+        <!-- Label -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Your Den"
+            android:textColor="#FFCB00"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginTop="6dp"
+            android:letterSpacing="0.05" />
+
+        <!-- Subtitle -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="View your avatar"
+            android:textColor="#999999"
+            android:textSize="8sp"
+            android:layout_marginTop="2dp" />
+
+    </LinearLayout>
+
+</FrameLayout>

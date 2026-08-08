@@ -7,6 +7,10 @@
     </queries>
 <uses-permission android:name="android.permission.CAMERA" />
 <uses-permission android:name="android.permission.INTERNET" />
+<!-- Required on Android 13+ (API 33) to actually show a notification.
+     FirebaseMessaging.requestPermission() prompts for this at runtime, but
+     the manifest entry has to exist regardless for the prompt to work. -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="brikstax"
         android:name="${applicationName}"
@@ -33,6 +37,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="brikstax" android:host="scan" />
+                <data android:scheme="brikstax" android:host="lookup" />
+                <data android:scheme="brikstax" android:host="set" />
             </intent-filter>
         </activity>
 
@@ -54,6 +60,33 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider"
                 android:resource="@xml/brikstax_widget_info" />
+        </receiver>
+
+        <receiver android:name=".SetLookupWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/set_lookup_widget_info" />
+        </receiver>
+
+        <receiver android:name=".AvatarDenWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/avatar_den_widget_info" />
+        </receiver>
+
+        <receiver android:name=".RandomSetWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/random_set_widget_info" />
         </receiver>
     </application>
 

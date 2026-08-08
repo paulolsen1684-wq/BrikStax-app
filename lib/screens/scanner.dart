@@ -18,6 +18,7 @@ import '../services/feature_flag_service.dart';
 import '../services/device_identity.dart';
 import '../services/api.dart';
 import 'add_set.dart';
+import 'set_lookup_screen.dart';
 
 const String _kWorkerUrl =
     'https://brikstax-worker.paul-olsen1684.workers.dev';
@@ -124,31 +125,56 @@ class _ComingSoonScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => const AddSetScreen()));
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      decoration: BoxDecoration(
-                        color: BT.ink,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: BT.ink, width: BT.bw),
-                        boxShadow: BT.shadow,
+                  child: Column(children: [
+                    GestureDetector(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => const SetLookupScreen())),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        decoration: BoxDecoration(
+                          color: BT.yellow,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: BT.yellow, width: BT.bw),
+                          boxShadow: BT.shadow,
+                        ),
+                        child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                          const Icon(Icons.search, color: BT.ink, size: 20),
+                          const SizedBox(width: 8),
+                          Text('Research a set',
+                              style: BT.body(size: 15, color: BT.ink)),
+                        ]),
                       ),
-                      child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                        const Icon(Icons.add, color: BT.yellow, size: 20),
-                        const SizedBox(width: 8),
-                        Text('Add set manually',
-                            style: BT.body(size: 15, color: BT.yellow)),
-                      ]),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => const AddSetScreen()));
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        decoration: BoxDecoration(
+                          color: BT.ink,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: BT.ink, width: BT.bw),
+                          boxShadow: BT.shadow,
+                        ),
+                        child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                          const Icon(Icons.add, color: BT.yellow, size: 20),
+                          const SizedBox(width: 8),
+                          Text('Add set manually',
+                              style: BT.body(size: 15, color: BT.yellow)),
+                        ]),
+                      ),
+                    ),
+                  ]),
                 ),
               ],
             ),
@@ -208,7 +234,7 @@ class _LiveScannerScreenState extends State<_LiveScannerScreen> {
         if (setNum != null && mounted) {
           if (_mode == ScanMode.inventory) {
             Navigator.pushReplacement(context, MaterialPageRoute(
-                builder: (_) => AddSetScreen(initialNum: setNum)));
+                builder: (_) => AddSetScreen(initialNum: setNum, fromScan: true)));
           } else {
             await _showRetailCheck(setNum, setName);
           }
@@ -715,26 +741,49 @@ class _LiveScannerScreenState extends State<_LiveScannerScreen> {
                 ),
                 const SizedBox(height: 14),
                 if (_mode == ScanMode.inventory)
-                  GestureDetector(
-                    onTap: () => Navigator.pushReplacement(context,
-                        MaterialPageRoute(builder: (_) => const AddSetScreen())),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: BT.yellow,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: BT.ink, width: BT.bw),
-                        boxShadow: BT.shadow,
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    GestureDetector(
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const SetLookupScreen())),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: BT.yellow.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: BT.ink, width: BT.bw),
+                          boxShadow: BT.shadow,
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.search, color: BT.ink, size: 16),
+                          const SizedBox(width: 6),
+                          Text('Research',
+                              style: BT.body(size: 12, color: BT.ink)),
+                        ]),
                       ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.keyboard, color: BT.ink, size: 18),
-                        const SizedBox(width: 8),
-                        Text('Enter set number instead',
-                            style: BT.body(size: 14, color: BT.ink)),
-                      ]),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () => Navigator.pushReplacement(context,
+                          MaterialPageRoute(builder: (_) => const AddSetScreen())),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: BT.yellow.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: BT.ink, width: BT.bw),
+                          boxShadow: BT.shadow,
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.keyboard, color: BT.ink, size: 16),
+                          const SizedBox(width: 6),
+                          Text('Enter number',
+                              style: BT.body(size: 12, color: BT.ink)),
+                        ]),
+                      ),
+                    ),
+                  ]),
               ]),
             ),
           ),

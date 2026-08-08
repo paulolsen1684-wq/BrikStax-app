@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/res/layout/random_set_widget.xml -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <!-- Header: BRIKSTAX wordmark -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="BRIKSTAX"
+        android:textColor="#FFCB00"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.05" />
+
+    <!-- Set name -->
+    <TextView
+        android:id="@+id/widget_set_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Set Name"
+        android:textColor="#EDEDED"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:layout_marginTop="6dp"
+        android:maxLines="2"
+        android:ellipsize="end" />
+
+    <!-- Set number and year -->
+    <TextView
+        android:id="@+id/widget_set_meta"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="#12345 · 2024"
+        android:textColor="#999999"
+        android:textSize="8sp"
+        android:layout_marginTop="2dp" />
+
+    <!-- Stats row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp"
+        android:weightSum="3"
+        android:spacing="4dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="500"
+                android:textColor="#00A850"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="pieces"
+                android:textColor="#999999"
+                android:textSize="7sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_retail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="$100"
+                android:textColor="#FFCB00"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="retail"
+                android:textColor="#999999"
+                android:textSize="7sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="$150"
+                android:textColor="#4FC3F7"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="sealed"
+                android:textColor="#999999"
+                android:textSize="7sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>
