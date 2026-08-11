@@ -1,0 +1,45 @@
+# Reconstructed 2026-08-11 from the live "brikstax-worker" Cloudflare
+# Worker via the Cloudflare API (GET .../workers/services/brikstax-worker,
+# .../workers/scripts/brikstax-worker/settings, .../schedules,
+# .../subdomain) -- no wrangler.toml ever existed on disk before this; the
+# worker had only ever been maintained by pasting worker.js by hand into
+# the dashboard editor. This file exists so `wrangler deploy` can be run
+# directly (from an agent or a terminal) without silently dropping the D1
+# binding, R2 binding, plaintext vars, or cron triggers the live worker
+# actually has -- deploying without it is what risks stripping those.
+#
+# Secrets (BRICKSET_KEY, DISCORD_BOT_TOKEN, DISCORD_PUBLIC_KEY, EBAY_KEY,
+# FIREBASE_SERVICE_ACCOUNT_JSON, MOD_CHANNEL_ID, MOD_WEBHOOK_URL,
+# NEWS_SECRET, PUSH_SEND_SECRET, RB_KEY, RB_KEY2, RB_KEY3) are deliberately
+# NOT in this file -- Cloudflare's API only ever returns secret *names*,
+# never values (that's the whole point of a secret binding), so they
+# can't be reconstructed this way. They already exist on the live worker
+# and `wrangler deploy` leaves existing secrets untouched, so this file
+# works as-is for redeploying code/config changes. They'd only need
+# re-entering (via `wrangler secret put <NAME>`) if this worker were ever
+# recreated from scratch.
+
+name = "brikstax-worker"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+[triggers]
+# Matches the 4 schedules seen on the live worker. Which one is which
+# (news/seed/cleanup vs. DEAL_CRON etc.) is determined by worker.js's own
+# scheduled() handler branching on event.cron -- not by anything here.
+crons = ["0 15 * * *", "0 3 * * *", "0 4 * * *", "0 */6 * * *"]
+
+[[d1_databases]]
+binding = "PRICE_CACHE"
+database_name = "brickledger-prices"
+database_id = "83cbb6ec-2fe6-43ba-807a-011dcfb74cb5"
+
+[[r2_buckets]]
+binding = "COMMUNITY_PHOTOS"
+bucket_name = "brikstax-community-photo"
+
+[vars]
+FEATURE_COMMUNITY_FEED = "true"
+FEATURE_SCANNER = "true"
+COMMUNITY_BANNER = "📸 Share a photo of your sets — approved posts appear here, and every like you get earns Briks for the shop!"
