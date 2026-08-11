@@ -58,6 +58,20 @@ dependencies:
   firebase_core: ^3.8.0
   firebase_messaging: ^15.1.5
 
+  # Local (on-device) scheduled notifications -- the Daily Five reminder
+  # (services/local_notification_service.dart) and any future "reminder
+  # about MY OWN state" notification. Deliberately separate from the FCM
+  # push stack above: whether you've done today's Daily Five is local-only
+  # state (SQLite, per device, never synced), so a server can't know to
+  # push about it -- this schedules/cancels entirely on-device instead.
+  # timezone/flutter_timezone are here only to support
+  # flutter_local_notifications' zonedSchedule API (needs to know the
+  # device's real IANA timezone, not just a UTC offset, so a scheduled
+  # "7pm local" reminder is actually 7pm local across DST changes).
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4
+  flutter_timezone: ^3.0.1
+
 flutter_native_splash:
   color: "#0A0907"
   image: assets/splash/splash_logo.png

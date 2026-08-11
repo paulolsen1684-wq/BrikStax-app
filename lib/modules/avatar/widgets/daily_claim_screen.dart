@@ -7,6 +7,7 @@ import 'loot_roll_widget.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/app_themes.dart';
 import '../../../utils/haptics.dart';
+import '../../../services/local_notification_service.dart';
 
 class DailyClaimScreen extends StatefulWidget {
   const DailyClaimScreen({super.key});
@@ -269,6 +270,11 @@ class _State extends State<DailyClaimScreen> {
     setState(() => _claiming = false);
     if (result != null && mounted) {
       BrikHaptics.heavy();
+      // Check-in is the one Daily Five task that isn't set via
+      // DailyFiveService.markDone (it's derived from the loot streak
+      // itself), so it needs its own sync call here rather than getting
+      // it for free from markDone's.
+      await LocalNotificationService.instance.syncDailyFiveReminder();
       await LootRollWidget.show(
         context,
         result.roll,

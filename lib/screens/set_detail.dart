@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/lego_set.dart';
+import '../models/brickset_extras.dart';
 import '../providers/collection.dart';
+import '../services/api.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/atoms.dart';
@@ -19,8 +22,23 @@ class SetDetailScreen extends StatefulWidget {
 class _State extends State<SetDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabs;
+  // BrickSet-sourced extras (instructions, rating, extra images) --
+  // fetched once per screen instance, lazily once we know the set's
+  // number, not tied to Provider/CollectionProvider since none of this
+  // is local collection data.
+  BrickSetExtras? _extras;
+  bool _extrasRequested = false;
+
   @override void initState() { super.initState(); _tabs = TabController(length: 3, vsync: this); }
   @override void dispose()   { _tabs.dispose(); super.dispose(); }
+
+  void _loadExtras(String num) {
+    if (_extrasRequested) return;
+    _extrasRequested = true;
+    Api.instance.fetchSetExtras(num).then((extras) {
+      if (mounted) setState(() => _extras = extras);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,107 +58,128 @@ class _State extends State<SetDetailScreen>
         }
         final s  = matches.first;
         final tc = themeColor(s.theme ?? '');
+        _loadExtras(s.num);
 
         return Scaffold(
           backgroundColor: bt.surface,
-          body: CustomScrollView(slivers: [
+          body: Column(children: [
 
             // ── Hero ────────────────────────────────────────────────────────
-            SliverAppBar(
-              expandedHeight: 230,
-              pinned: true,
-              backgroundColor: tc,
-              foregroundColor: Colors.white,
-              iconTheme: const IconThemeData(color: Colors.white),
-              flexibleSpace: FlexibleSpaceBar(
-                background: _HeroBg(s: s, tc: tc),
-              ),
-            ),
-
-            // ── Price grid ──────────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: bt.cardBg,
-                  border: Border(
-                      bottom: BorderSide(color: bt.cardBorder, width: BT.bw)),
+            // Deliberately NOT a SliverAppBar/FlexibleSpaceBar background
+            // anymore -- a horizontally-swiped PageView nested inside
+            // flexibleSpace competes with CustomScrollView's own vertical
+            // drag recognizer for the same gesture arena and reliably
+            // loses (confirmed: images displayed and paged via dots, but
+            // swipe-to-change-photo silently did nothing). Pulling the
+            // hero out to a fixed-height sibling of the CustomScrollView
+            // (not a descendant of its Scrollable at all) removes any
+            // possible arena competition entirely -- trades away the old
+            // collapse-into-toolbar animation for a fixed-height header,
+            // which is also just a simpler, very common detail-screen
+            // pattern (Airbnb-listing-style: swipeable photo header, page
+            // content scrolls independently below it).
+            SizedBox(
+              height: 230,
+              width: double.infinity,
+              child: Stack(children: [
+                _HeroBg(s: s, tc: tc, extras: _extras),
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 10,
+                  left: 12,
+                  child: _HeroBackButton(),
                 ),
-                child: Row(children: [
-                  _PTile('Retail', s.retail),
-                  _PTile('Paid',   s.paid),
-                  _PTile('eBay',   s.ebayAvg, color: BT.green,
-                      isFallback: s.ebayAvgIsFallback),
-                  _RoiTile(s.roi),
-                ]),
-              ),
+              ]),
             ),
 
-            // ── Retirement window banner ───────────────────────────────────
-            if (s.inRetirementWindow)
-              SliverToBoxAdapter(
-                child: Container(
-                  margin: const EdgeInsets.all(12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: BT.greenBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: BT.green, width: BT.bw),
+            Expanded(
+              child: CustomScrollView(slivers: [
+
+                // ── Price grid ────────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: bt.cardBg,
+                      border: Border(
+                          bottom: BorderSide(color: bt.cardBorder, width: BT.bw)),
+                    ),
+                    child: Row(children: [
+                      _PTile('Retail', s.retail),
+                      _PTile('Paid',   s.paid),
+                      _PTile('eBay',   s.ebayAvg, color: BT.green,
+                          isFallback: s.ebayAvgIsFallback),
+                      _RoiTile(s.roi),
+                    ]),
                   ),
-                  child: Row(children: [
-                    const Text('🔥', style: TextStyle(fontSize: 20)),
-                    const SizedBox(width: 10),
-                    Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Text(
-                        'In its price-climb window',
-                        style: BT.body(size: 13, color: BT.green,
-                            weight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${s.monthsSinceRetirement} months since retirement — this is '
-                        'the ~18-24 month stretch where secondary-market prices '
-                        'often climb as retail supply dries up.',
-                        style: BT.mono(size: 10, color: bt.tx3),
-                      ),
-                    ])),
-                  ]),
                 ),
-              ),
 
-            // ── Tab bar ─────────────────────────────────────────────────────
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _TabDelegate(
-                bt,
-                TabBar(
-                  controller: _tabs,
-                  tabs: const [
-                    Tab(text: 'Prices'),
-                    Tab(text: 'Chart'),
-                    Tab(text: 'Details'),
-                  ],
-                  indicatorColor: BT.yellow,
-                  indicatorWeight: 3,
-                  labelStyle: BT.mono(size: 11, weight: FontWeight.w500),
-                  unselectedLabelStyle: BT.mono(size: 11),
-                  labelColor: bt.tx,
-                  unselectedLabelColor: bt.txMuted,
-                  dividerColor: bt.cardBorder,
+                // ── Retirement window banner ─────────────────────────────
+                if (s.inRetirementWindow)
+                  SliverToBoxAdapter(
+                    child: Container(
+                      margin: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: BT.greenBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: BT.green, width: BT.bw),
+                      ),
+                      child: Row(children: [
+                        const Text('🔥', style: TextStyle(fontSize: 20)),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(
+                            'In its price-climb window',
+                            style: BT.body(size: 13, color: BT.green,
+                                weight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${s.monthsSinceRetirement} months since retirement — this is '
+                            'the ~18-24 month stretch where secondary-market prices '
+                            'often climb as retail supply dries up.',
+                            style: BT.mono(size: 10, color: bt.tx3),
+                          ),
+                        ])),
+                      ]),
+                    ),
+                  ),
+
+                // ── Tab bar ───────────────────────────────────────────────
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _TabDelegate(
+                    bt,
+                    TabBar(
+                      controller: _tabs,
+                      tabs: const [
+                        Tab(text: 'Prices'),
+                        Tab(text: 'Chart'),
+                        Tab(text: 'Details'),
+                      ],
+                      indicatorColor: BT.yellow,
+                      indicatorWeight: 3,
+                      labelStyle: BT.mono(size: 11, weight: FontWeight.w500),
+                      unselectedLabelStyle: BT.mono(size: 11),
+                      labelColor: bt.tx,
+                      unselectedLabelColor: bt.txMuted,
+                      dividerColor: bt.cardBorder,
+                    ),
+                  ),
                 ),
-              ),
-            ),
 
-            SliverFillRemaining(
-              child: TabBarView(
-                controller: _tabs,
-                children: [
-                  _PricesTab(s: s),
-                  _ChartTab(s: s),
-                  _DetailsTab(s: s),
-                ],
-              ),
+                SliverFillRemaining(
+                  child: TabBarView(
+                    controller: _tabs,
+                    children: [
+                      _PricesTab(s: s),
+                      _ChartTab(s: s),
+                      _DetailsTab(s: s, extras: _extras),
+                    ],
+                  ),
+                ),
+              ]),
             ),
           ]),
 
@@ -174,25 +213,67 @@ class _State extends State<SetDetailScreen>
 }
 
 // ── Hero background ───────────────────────────────────────────────────────────
-class _HeroBg extends StatelessWidget {
+// Swipeable when BrickSet's additional-images call returned more than just
+// the primary product shot (see Api.fetchSetExtras) -- falls back to a
+// single static image (the old behavior) when there's nothing extra to
+// swipe to, so this never depends on the BrickSet fetch having completed.
+class _HeroBg extends StatefulWidget {
   final LegoSet s;
   final Color tc;
-  const _HeroBg({required this.s, required this.tc});
+  final BrickSetExtras? extras;
+  const _HeroBg({required this.s, required this.tc, this.extras});
 
   @override
-  Widget build(BuildContext context) =>
-      Stack(fit: StackFit.expand, children: [
+  State<_HeroBg> createState() => _HeroBgState();
+}
+
+class _HeroBgState extends State<_HeroBg> {
+  final _pageCtrl = PageController();
+  int _page = 0;
+
+  List<String> get _images {
+    final list = <String>[];
+    if (widget.s.imageUrl != null) list.add(widget.s.imageUrl!);
+    for (final u in widget.extras?.additionalImages ?? const <String>[]) {
+      if (!list.contains(u)) list.add(u);
+    }
+    return list;
+  }
+
+  @override
+  void dispose() { _pageCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    final tc = widget.tc;
+    final extras = widget.extras;
+    final images = _images;
+
+    return Stack(fit: StackFit.expand, children: [
         StudBackground(color: tc, child: const SizedBox.expand()),
-        if (s.imageUrl != null)
+        if (images.isNotEmpty)
           ColorFiltered(
             colorFilter: ColorFilter.mode(
                 Colors.black.withOpacity(.25), BlendMode.darken),
-            child: CachedNetworkImage(
-              imageUrl: s.imageUrl!,
-              fit: BoxFit.contain,
-              width: double.infinity,
-              height: double.infinity,
-            ),
+            child: images.length == 1
+                ? CachedNetworkImage(
+                    imageUrl: images.first,
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                    height: double.infinity,
+                  )
+                : PageView.builder(
+                    controller: _pageCtrl,
+                    itemCount: images.length,
+                    onPageChanged: (i) => setState(() => _page = i),
+                    itemBuilder: (_, i) => CachedNetworkImage(
+                      imageUrl: images[i],
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
           ),
         const DecoratedBox(
           decoration: BoxDecoration(
@@ -206,6 +287,21 @@ class _HeroBg extends StatelessWidget {
         Positioned(
           bottom: 14, left: 16, right: 16,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (images.length > 1) ...[
+              Row(children: List.generate(images.length, (i) =>
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.only(right: 4),
+                  width: i == _page ? 14 : 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: i == _page ? Colors.white : Colors.white38,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              )),
+              const SizedBox(height: 8),
+            ],
             Wrap(spacing: 6, children: [
               CondBadge(s.status),
               if (s.theme != null)
@@ -245,14 +341,54 @@ class _HeroBg extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis),
             const SizedBox(height: 2),
-            Text(
-              '${s.num}  ·  ${s.year ?? '?'}  ·  '
-              '${s.pieces != null ? '${s.pieces} pcs' : ''}',
-              style: BT.mono(size: 11, color: Colors.white60),
-            ),
+            Row(children: [
+              Expanded(child: Text(
+                '${s.num}  ·  ${s.year ?? '?'}  ·  '
+                '${s.pieces != null ? '${s.pieces} pcs' : ''}',
+                style: BT.mono(size: 11, color: Colors.white60),
+                overflow: TextOverflow.ellipsis,
+              )),
+              // BrickSet's average star rating, right next to the set's
+              // own name/piece-count line -- per feedback, this belongs up
+              // here where it's immediately visible, not buried down in
+              // the Details tab (still shown there too, tappable through
+              // to the BrickSet page -- this hero copy is display-only).
+              if (extras != null && extras.hasRating) ...[
+                const SizedBox(width: 8),
+                _StarRating(
+                  rating: extras.rating!,
+                  count: extras.ratingCount,
+                  light: true,
+                  iconSize: 12,
+                ),
+              ],
+            ]),
           ]),
         ),
       ]);
+  }
+}
+
+// ── Hero back button ──────────────────────────────────────────────────────────
+// A plain floating circular button, standing in for the automatic back
+// button SliverAppBar used to provide -- needed now that the hero is a
+// fixed Stack sibling rather than a SliverAppBar (see _State.build's hero
+// section for why).
+class _HeroBackButton extends StatelessWidget {
+  const _HeroBackButton();
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: () => Navigator.of(context).maybePop(),
+    child: Container(
+      width: 36, height: 36,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(.35),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+    ),
+  );
 }
 
 // ── Price grid tiles ──────────────────────────────────────────────────────────
@@ -644,12 +780,21 @@ class _ChartTab extends StatelessWidget {
 // ── Details tab ───────────────────────────────────────────────────────────────
 class _DetailsTab extends StatefulWidget {
   final LegoSet s;
-  const _DetailsTab({required this.s});
+  final BrickSetExtras? extras;
+  const _DetailsTab({required this.s, this.extras});
   @override State<_DetailsTab> createState() => _DetailsTabState();
 }
 
 class _DetailsTabState extends State<_DetailsTab> {
   late final TextEditingController _notes;
+  // User's explicit language pick for the Instructions card, if they've
+  // opened the picker -- null means "not chosen yet, default to the first
+  // group". Kept separate from a derived/computed value since extras
+  // (and therefore the available language groups) can arrive AFTER first
+  // build, once the BrickSet fetch resolves -- see SetDetailScreen's
+  // _loadExtras.
+  String? _selectedLanguage;
+
   @override void initState() {
     super.initState();
     _notes = TextEditingController(text: widget.s.notes);
@@ -806,8 +951,9 @@ class _DetailsTabState extends State<_DetailsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final bt = context.bt;
-    final s  = widget.s;
+    final bt     = context.bt;
+    final s      = widget.s;
+    final extras = widget.extras;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 100),
@@ -821,6 +967,12 @@ class _DetailsTabState extends State<_DetailsTab> {
           InfoRow(label: 'Subtheme',   value: s.subtheme ?? '—'),
         ]),
         const SizedBox(height: 12),
+
+        // ── BrickSet community rating ────────────────────────────────────
+        if (extras != null && extras.hasRating) ...[
+          _ratingCard(bt, extras),
+          const SizedBox(height: 12),
+        ],
 
         // ── Editable rows ────────────────────────────────────────────────
         Text('TAP TO EDIT', style: BT.mono(size: 9, color: bt.tx3)),
@@ -901,6 +1053,16 @@ class _DetailsTabState extends State<_DetailsTab> {
           ),
         ),
         const SizedBox(height: 12),
+
+        // ── Instructions (BrickSet) ─────────────────────────────────────
+        if (extras != null && extras.hasInstructions) ...[
+          Text('Instructions', style: BT.mono(size: 9, color: bt.tx3)),
+          const SizedBox(height: 6),
+          _instructionsCard(bt, extras),
+          const SizedBox(height: 12),
+        ],
+
+
 
         // Notes
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -989,4 +1151,230 @@ class _DetailsTabState extends State<_DetailsTab> {
           ]),
         ),
       );
+
+  // ── BrickSet rating card ────────────────────────────────────────────────
+  Widget _ratingCard(BrikStaxColors bt, BrickSetExtras extras) => GestureDetector(
+    onTap: extras.bricksetUrl != null
+        ? () => launchUrl(Uri.parse(extras.bricksetUrl!),
+            mode: LaunchMode.externalApplication)
+        : null,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bt.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: bt.cardBorder, width: BT.bw),
+        boxShadow: [BoxShadow(color: bt.shadowColor,
+            offset: const Offset(2, 2))],
+      ),
+      child: Row(children: [
+        Text('BrickSet rating', style: BT.mono(size: 11, color: bt.tx3)),
+        const Spacer(),
+        _StarRating(rating: extras.rating!, count: extras.ratingCount),
+        if (extras.bricksetUrl != null) ...[
+          const SizedBox(width: 6),
+          Icon(Icons.open_in_new, color: bt.txMuted, size: 14),
+        ],
+      ]),
+    ),
+  );
+
+  // ── Instructions card ────────────────────────────────────────────────────
+  // Grouped by language (best-effort, parsed from BrickSet's free-text
+  // `description` field -- there's no dedicated language field in the API,
+  // see _instructionLanguage) with a dropdown-style picker when a set has
+  // more than one language available, which is the common case. A set
+  // with only one language skips the picker entirely -- nothing to choose.
+  Widget _instructionsCard(BrikStaxColors bt, BrickSetExtras extras) {
+    final grouped = <String, List<BrickSetInstruction>>{};
+    for (int i = 0; i < extras.instructions.length; i++) {
+      final lang = _instructionLanguage(extras.instructions[i].description, i);
+      grouped.putIfAbsent(lang, () => []).add(extras.instructions[i]);
+    }
+    final languages = grouped.keys.toList();
+    final selected = (_selectedLanguage != null && grouped.containsKey(_selectedLanguage))
+        ? _selectedLanguage!
+        : languages.first;
+    final items = grouped[selected]!;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bt.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: bt.cardBorder, width: BT.bw),
+        boxShadow: [BoxShadow(color: bt.shadowColor,
+            offset: const Offset(2, 2))],
+      ),
+      child: Column(children: [
+        if (languages.length > 1) ...[
+          _languageDropdown(bt, languages, selected),
+          Divider(height: 1, thickness: 1, color: bt.surface2),
+        ],
+        for (int i = 0; i < items.length; i++)
+          _instructionRow(bt, items[i], isLast: i == items.length - 1),
+      ]),
+    );
+  }
+
+  Widget _languageDropdown(
+      BrikStaxColors bt, List<String> languages, String selected) =>
+      GestureDetector(
+        onTap: () async {
+          final picked = await _pickLanguage(languages, selected);
+          if (picked != null && mounted) {
+            setState(() => _selectedLanguage = picked);
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(children: [
+            const Icon(Icons.language, size: 16, color: BT.blue),
+            const SizedBox(width: 10),
+            Text('Language', style: BT.mono(size: 11, color: bt.tx3)),
+            const Spacer(),
+            Text(selected, style: BT.body(size: 13, color: bt.tx)),
+            const SizedBox(width: 6),
+            Icon(Icons.unfold_more, color: bt.txMuted, size: 16),
+          ]),
+        ),
+      );
+
+  Future<String?> _pickLanguage(List<String> languages, String current) {
+    final bt = context.bt;
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: bt.cardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        side: BorderSide(color: bt.cardBorder, width: BT.bw),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SheetHandle(),
+            const SizedBox(height: 14),
+            Text('Instructions language',
+                style: BT.display(size: 22, color: bt.tx)),
+            const SizedBox(height: 14),
+            for (final lang in languages)
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx, lang),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: lang == current ? BT.yellowBg : bt.cardBg,
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: lang == current ? BT.yellow3 : bt.cardBorder,
+                      width: BT.bw,
+                    ),
+                  ),
+                  child: Row(children: [
+                    Expanded(child: Text(lang,
+                        style: BT.body(size: 14, color: bt.tx))),
+                    if (lang == current)
+                      const Icon(Icons.check, color: BT.ink, size: 16),
+                  ]),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _instructionRow(BrikStaxColors bt, BrickSetInstruction instr,
+          {required bool isLast}) =>
+      GestureDetector(
+        onTap: () =>
+            launchUrl(Uri.parse(instr.url), mode: LaunchMode.externalApplication),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            border: isLast
+                ? null
+                : Border(bottom: BorderSide(color: bt.surface2, width: 1)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.menu_book_outlined, size: 16, color: BT.blue),
+            const SizedBox(width: 10),
+            Expanded(child: Text(
+                instr.description.isNotEmpty
+                    ? instr.description
+                    : 'Building instructions',
+                style: BT.body(size: 13, color: bt.tx))),
+            const SizedBox(width: 6),
+            Icon(Icons.open_in_new, color: bt.txMuted, size: 15),
+          ]),
+        ),
+      );
+}
+
+// ── Language detection for BrickSet instruction entries ────────────────────
+// BrickSet's getInstructions2 response has no dedicated language field --
+// language (when present at all) is folded into the free-text `description`
+// (e.g. "English", "Building Instructions - Deutsch"). Best-effort substring
+// match against known language names, falling back to the raw description
+// (or a generic numbered label if that's empty too) so grouping never
+// crashes or silently drops an entry just because its description doesn't
+// look like any of these.
+const _kInstructionLanguages = [
+  'English', 'French', 'German', 'Dutch', 'Danish', 'Italian', 'Spanish',
+  'Portuguese', 'Polish', 'Czech', 'Swedish', 'Norwegian', 'Finnish',
+  'Japanese', 'Korean', 'Chinese', 'Russian', 'Hungarian', 'Greek',
+  'Turkish', 'Arabic',
+  // Native spellings BrickSet sometimes uses instead of the English name
+  'Deutsch', 'Français', 'Español', 'Português', 'Italiano', 'Nederlands',
+  'Polski', 'Svenska', 'Norsk', 'Suomi', 'Dansk',
+];
+
+String _instructionLanguage(String description, int index) {
+  final lower = description.toLowerCase();
+  for (final lang in _kInstructionLanguages) {
+    if (lower.contains(lang.toLowerCase())) return lang;
+  }
+  final trimmed = description.trim();
+  return trimmed.isNotEmpty ? trimmed : 'Instructions ${index + 1}';
+}
+
+// ── Star rating (BrickSet average, 0-5) ─────────────────────────────────────
+class _StarRating extends StatelessWidget {
+  final double rating;
+  final int count;
+  // `light` switches to a white/translucent palette for use over a photo
+  // (the hero overlay) instead of the default card-on-surface colors used
+  // in the Details tab's rating card.
+  final bool light;
+  final double iconSize;
+  const _StarRating({
+    required this.rating,
+    required this.count,
+    this.light = false,
+    this.iconSize = 15,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bt = context.bt;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (int i = 0; i < 5; i++)
+        Icon(
+          rating - i >= 1
+              ? Icons.star
+              : rating - i >= 0.5
+                  ? Icons.star_half
+                  : Icons.star_border,
+          size: iconSize,
+          color: light ? Colors.white : BT.yellow3,
+        ),
+      const SizedBox(width: 6),
+      Text('${rating.toStringAsFixed(1)} ($count)',
+          style: BT.mono(size: 10, color: light ? Colors.white70 : bt.tx2)),
+    ]);
+  }
 }

@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'loot_service.dart';
+import '../../../services/local_notification_service.dart';
 
 // Persisted "done" state is keyed by .name now (see _save/_decodeTask
 // below), not position, so reordering or inserting values here is safe --
@@ -23,19 +24,37 @@ class DailyFiveService {
   String _today = '';
   final Set<DailyTask> _done = {};
   bool _bonusClaimed = false;
+  // True once a reminder has actually been needed today (i.e.
+  // LocalNotificationService found tasks incomplete at least once) --
+  // finishing after this is true earns a +10 Brik top-up on the normal
+  // bonus roll, see claimBonus(). Deliberately NOT set just because the
+  // user opted into reminders; only real "you weren't done yet" moments
+  // count, so it can't be gamed by toggling the setting on and off.
+  bool _reminderNeeded = false;
 
   Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'brikstax_daily5.db');
-    return openDatabase(path, version: 1, onCreate: (db, _) async {
-      await db.execute('''
-        CREATE TABLE daily5 (
-          id    INTEGER PRIMARY KEY DEFAULT 1,
-          day   TEXT NOT NULL,
-          done  TEXT NOT NULL,
-          bonus INTEGER NOT NULL
-        )
-      ''');
-    });
+    return openDatabase(
+      path,
+      version: 2,
+      onCreate: (db, _) async {
+        await db.execute('''
+          CREATE TABLE daily5 (
+            id    INTEGER PRIMARY KEY DEFAULT 1,
+            day   TEXT NOT NULL,
+            done  TEXT NOT NULL,
+            bonus INTEGER NOT NULL,
+            reminder_needed INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+              'ALTER TABLE daily5 ADD COLUMN reminder_needed INTEGER NOT NULL DEFAULT 0');
+        }
+      },
+    );
   }
 
   Future<Database> get _database async {
@@ -59,6 +78,11 @@ class DailyFiveService {
           final list = jsonDecode(rows.first['done'] as String) as List;
           _done.addAll(list.map(_decodeTask).whereType<DailyTask>());
           _bonusClaimed = (rows.first['bonus'] as int) == 1;
+          // Column didn't exist before schema v2 -- a row saved by an
+          // older app version simply won't have it yet on the one day
+          // this migration runs, defaulting to false (same as ALTER
+          // TABLE's own DEFAULT 0 for existing rows).
+          _reminderNeeded = (rows.first['reminder_needed'] as int? ?? 0) == 1;
         } else {
           // new day — reset
           await _resetForToday();
@@ -73,6 +97,7 @@ class DailyFiveService {
     _today = _dayKey();
     _done.clear();
     _bonusClaimed = false;
+    _reminderNeeded = false;
     await _save();
   }
 
@@ -84,6 +109,7 @@ class DailyFiveService {
         'day': _today,
         'done': jsonEncode(_done.map((e) => e.name).toList()),
         'bonus': _bonusClaimed ? 1 : 0,
+        'reminder_needed': _reminderNeeded ? 1 : 0,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (_) {}
   }
@@ -124,6 +150,11 @@ class DailyFiveService {
     await ensureToday();
     _done.add(t);
     await _save();
+    // Re-checks completion and cancels today's reminder the moment the
+    // last task is done, rather than leaving a stale "not done yet"
+    // notification scheduled from earlier in the session. No-ops if the
+    // user never opted into reminders.
+    await LocalNotificationService.instance.syncDailyFiveReminder();
   }
 
   int get completedCount =>
@@ -133,14 +164,40 @@ class DailyFiveService {
 
   bool get bonusAvailable => allComplete && !_bonusClaimed;
 
-  /// Claim the all-five bonus — a free guaranteed-ish roll. Returns the roll
-  /// result (via LootService.grantBonusRoll) or null if not available.
-  Future<dynamic> claimBonus() async {
+  /// Called by LocalNotificationService.syncDailyFiveReminder(), but only
+  /// on days its own 60%-of-incomplete-days roll actually decides to show
+  /// a reminder -- records that a real prompt is happening today, so
+  /// claimBonus() below knows to pay the extra follow-through bonus. Not
+  /// called on days that roll "skip," so the bonus stays tied to an actual
+  /// prompt rather than just "was incomplete at some point." Idempotent
+  /// (only writes once per day) since sync can run many times (app
+  /// launch, every markDone, the daily claim).
+  Future<void> markReminderNeeded() async {
+    await ensureToday();
+    if (_reminderNeeded) return;
+    _reminderNeeded = true;
+    await _save();
+  }
+
+  /// Claim the all-five bonus — a free guaranteed-ish roll, plus a +10 Brik
+  /// top-up if a reminder was actually needed today (see
+  /// markReminderNeeded) -- finishing up after being nudged earns more
+  /// than finishing without ever needing one. Returns the roll result or
+  /// null if not available.
+  Future<ClaimResult?> claimBonus() async {
     await ensureToday();
     if (!bonusAvailable) return null;
     _bonusClaimed = true;
     await _save();
     // A little reward: a free roll for showing up fully.
-    return LootService.instance.grantBonusRoll();
+    final result = await LootService.instance.grantBonusRoll();
+    if (result == null || !_reminderNeeded) return result;
+
+    await LootService.instance.addBriks(10);
+    return ClaimResult(
+      roll: result.roll,
+      briksEarned: result.briksEarned + 10,
+      wasDupe: result.wasDupe,
+    );
   }
 }

@@ -195,7 +195,13 @@ class _State extends State<DailyFiveScreen> {
     onTap: () async {
       final result = await DailyFiveService.instance.claimBonus();
       if (result != null && mounted) {
-        await LootRollWidget.show(context, result.roll);
+        // Was just `LootRollWidget.show(context, result.roll)` -- silently
+        // dropped briksEarned/wasDupe, so any Briks from the bonus roll
+        // (including the new +10 follow-through bonus, see
+        // DailyFiveService.claimBonus) landed in the wallet without ever
+        // being shown in the reveal popup.
+        await LootRollWidget.show(context, result.roll,
+            briksEarned: result.briksEarned, wasDupe: result.wasDupe);
       }
       _refresh();
     },

@@ -28,6 +28,7 @@ import 'theme/app_themes.dart';
 import 'utils/brik_page_route.dart';
 import 'services/widget_service.dart';
 import 'services/deep_link_service.dart';
+import 'services/local_notification_service.dart';
 
 /// Flip to false to hide the Wishlist tab everywhere. Single source of truth.
 const bool kWishlistEnabled = true;
@@ -56,6 +57,12 @@ void main() async {
       await LootService.instance.init();
       await DevMode.instance.init();
       await DailyFiveService.instance.init();
+      // Real feature (not dev-gated, unlike push_service.dart's FCM stack)
+      // -- fully on-device, so there's no server-side risk in initializing
+      // it for every user. restoreOptedIn() only actually schedules
+      // anything if the Settings toggle was previously turned on.
+      await LocalNotificationService.instance.init();
+      await LocalNotificationService.instance.restoreOptedIn();
       await HiddenThemeService.instance.init();
       await WishlistService.instance.init();
       await ThemeService.instance.init();

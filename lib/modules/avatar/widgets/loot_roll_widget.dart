@@ -11,6 +11,7 @@ import '../models/loot_roll.dart';
 import '../services/achievement_service.dart';
 import 'avatar_widget.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/brick_burst.dart';
 
 /// Unifies a rolled reward's display info -- a roll can resolve to either
 /// catalog now (sprite = background, pixel = head/hat/torso/legs/item), so
@@ -21,6 +22,12 @@ class _RewardInfo {
   final String description;
   final Color rarityColor;
   final String rarityLabel;
+  // 0..1, common=0 through legendary=1 -- drives how elaborate the reveal
+  // burst is (see BrickBurstOverlay below). Both SpriteRarity and
+  // PixelRarity are the same 5-value {common, uncommon, rare, epic,
+  // legendary} ordering, so rarity.index / 4.0 works generically for
+  // either catalog without needing two separate scales.
+  final double burstIntensity;
   final sprite.SpriteCosmetic? spriteCosmetic;
   final pixel.PixelCosmetic? pixelCosmetic;
   const _RewardInfo({
@@ -28,6 +35,7 @@ class _RewardInfo {
     required this.description,
     required this.rarityColor,
     required this.rarityLabel,
+    required this.burstIntensity,
     this.spriteCosmetic,
     this.pixelCosmetic,
   });
@@ -42,6 +50,7 @@ class _RewardInfo {
         description: sc.description ?? '${sc.rarity.label} ${sc.slot.name}',
         rarityColor: sc.rarity.color,
         rarityLabel: sc.rarity.label,
+        burstIntensity: sc.rarity.index / 4.0,
         spriteCosmetic: sc,
       );
     }
@@ -52,6 +61,7 @@ class _RewardInfo {
         description: pc.description ?? '${pc.rarity.label} ${pc.slot.name}',
         rarityColor: pc.rarity.color,
         rarityLabel: pc.rarity.label,
+        burstIntensity: pc.rarity.index / 4.0,
         pixelCosmetic: pc,
       );
     }
@@ -322,17 +332,33 @@ class _LootRollWidgetState extends State<LootRollWidget>
             : state;
 
     return Center(
-      child: FadeTransition(
-        opacity: _revealFade,
-        child: ScaleTransition(
-          scale: _revealScale,
-          child: AvatarWidget(
-            state: previewState,
-            size: _avatarSize,
-            animated: true,
+      child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
+        // Burst plays once behind the figure, scaled by the item's own
+        // rarity (not the coarser common/rare/epic roll tier used for the
+        // dialog border above) -- a common reveal gets a token flourish,
+        // legendary gets the full show. Capped at 1.6x the avatar so it
+        // stays inside the fixed _stageHeight (184) box rather than
+        // visually overlapping the tier badge/text above and below it.
+        SizedBox(
+          width: _avatarSize * 1.6, height: _avatarSize * 1.6,
+          child: BrickBurstOverlay(
+            color: reward.rarityColor,
+            intensity: reward.burstIntensity,
+            duration: Duration(milliseconds: (700 + reward.burstIntensity * 500).round()),
           ),
         ),
-      ),
+        FadeTransition(
+          opacity: _revealFade,
+          child: ScaleTransition(
+            scale: _revealScale,
+            child: AvatarWidget(
+              state: previewState,
+              size: _avatarSize,
+              animated: true,
+            ),
+          ),
+        ),
+      ]),
     );
   }
 }

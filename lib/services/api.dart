@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'constants.dart';
 import 'storage.dart';
+import '../models/brickset_extras.dart';
 
 class Api {
   Api._();
@@ -199,6 +200,136 @@ class Api {
       return (retail: retail, exitDate: exitDate);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Instructions links, star rating, and extra gallery images -- Set
+  /// Detail only, kept separate from fetchSetDetails (used more broadly,
+  /// e.g. Set Lookup) since nothing else needs any of this. One getSets
+  /// call to get setID/rating/counts, then up to two more calls
+  /// (getInstructions2, getAdditionalImages) run in parallel, skipped
+  /// entirely when their respective count is 0. Per BrickSet's own API
+  /// docs ("Note that only calls to the getSets method count against key
+  /// usage"), the follow-up calls don't cost anything against the daily
+  /// key limit.
+  Future<BrickSetExtras?> fetchSetExtras(String setNum) async {
+    final clean   = setNum.replaceAll(RegExp(r'-\d+$'), '');
+    final variant = '$clean-1';
+    final params  = jsonEncode({'setNumber': variant, 'pageSize': 1});
+    final url = Uri.parse(
+      'https://brickset.com/api/v3.asmx/getSets'
+      '?apiKey=${Uri.encodeComponent(K.bsKey)}'
+      '&userHash='
+      '&params=${Uri.encodeComponent(params)}',
+    );
+
+    Map<String, dynamic> set0;
+    try {
+      final r = await _client.get(url).timeout(const Duration(seconds: 14));
+      if (r.statusCode != 200) return null;
+      final body = r.body;
+      final ji   = body.indexOf('{');
+      if (ji < 0) return null;
+      final d = jsonDecode(body.substring(ji)) as Map<String, dynamic>;
+      if (d['status'] != 'success') return null;
+      final sets = d['sets'] as List?;
+      if (sets == null || sets.isEmpty) return null;
+      set0 = (sets[0] as Map).cast<String, dynamic>();
+    } catch (_) {
+      return null;
+    }
+
+    final setId               = set0['setID'];
+    final rating              = (set0['rating'] as num?)?.toDouble();
+    final ratingCount         = (set0['ratingCount'] as num?)?.toInt() ?? 0;
+    final reviewCount         = (set0['reviewCount'] as num?)?.toInt() ?? 0;
+    final bricksetUrl         = set0['bricksetURL'] as String?;
+    final instructionsCount   = (set0['instructionsCount'] as num?)?.toInt() ?? 0;
+    final additionalImgCount  = (set0['additionalImageCount'] as num?)?.toInt() ?? 0;
+
+    List<BrickSetInstruction> instructions = const [];
+    List<String> images = const [];
+    final futures = <Future>[];
+
+    if (instructionsCount > 0) {
+      futures.add(
+        _fetchInstructions(variant).then((v) => instructions = v),
+      );
+    }
+    if (additionalImgCount > 0 && setId != null) {
+      futures.add(
+        _fetchAdditionalImages(setId).then((v) => images = v),
+      );
+    }
+    if (futures.isNotEmpty) await Future.wait(futures);
+
+    return BrickSetExtras(
+      rating: (rating != null && rating > 0 && ratingCount > 0) ? rating : null,
+      ratingCount: ratingCount,
+      reviewCount: reviewCount,
+      bricksetUrl: bricksetUrl,
+      instructions: instructions,
+      additionalImages: images,
+    );
+  }
+
+  Future<List<BrickSetInstruction>> _fetchInstructions(String setNumber) async {
+    final url = Uri.parse(
+      'https://brickset.com/api/v3.asmx/getInstructions2'
+      '?apiKey=${Uri.encodeComponent(K.bsKey)}'
+      '&setNumber=${Uri.encodeComponent(setNumber)}',
+    );
+    try {
+      final r = await _client.get(url).timeout(const Duration(seconds: 14));
+      if (r.statusCode != 200) return const [];
+      final body = r.body;
+      final ji   = body.indexOf('{');
+      if (ji < 0) return const [];
+      final d = jsonDecode(body.substring(ji)) as Map<String, dynamic>;
+      if (d['status'] != 'success') return const [];
+      final list = d['instructions'] as List? ?? const [];
+      return list
+          .map((e) {
+            final m = e as Map;
+            final u = (m['URL'] ?? m['url']) as String?;
+            if (u == null || u.isEmpty) return null;
+            return BrickSetInstruction(
+              url: u,
+              description: (m['description'] as String?) ?? '',
+            );
+          })
+          .whereType<BrickSetInstruction>()
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<String>> _fetchAdditionalImages(dynamic setId) async {
+    final url = Uri.parse(
+      'https://brickset.com/api/v3.asmx/getAdditionalImages'
+      '?apiKey=${Uri.encodeComponent(K.bsKey)}'
+      '&setID=$setId',
+    );
+    try {
+      final r = await _client.get(url).timeout(const Duration(seconds: 14));
+      if (r.statusCode != 200) return const [];
+      final body = r.body;
+      final ji   = body.indexOf('{');
+      if (ji < 0) return const [];
+      final d = jsonDecode(body.substring(ji)) as Map<String, dynamic>;
+      if (d['status'] != 'success') return const [];
+      final list = d['additionalImages'] as List? ?? const [];
+      return list
+          .map((e) {
+            final m = e as Map;
+            return (m['imageURL'] ?? m['thumbnailURL']) as String?;
+          })
+          .whereType<String>()
+          .where((u) => u.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
     }
   }
 

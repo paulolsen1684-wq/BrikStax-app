@@ -10,6 +10,7 @@ import '../theme/app_themes.dart';
 import '../utils/haptics.dart';
 import '../widgets/atoms.dart';
 import '../widgets/sheets.dart';
+import '../widgets/set_added_celebration.dart';
 
 class AddSetScreen extends StatefulWidget {
   final String?               initialNum;
@@ -135,6 +136,12 @@ class _State extends State<AddSetScreen> {
       return;
     }
     BrikHaptics.medium();
+    // Value signal at add-time is retail (or paid, if retail's unknown) --
+    // there's no eBay price yet for a set added this instant. Fired before
+    // popping so it uses this route's still-mounted context; Overlay is
+    // shared app-wide by Navigator, so the celebration survives the pop
+    // and plays over whatever screen you land back on.
+    showSetAddedCelebration(context, value: result.retail ?? result.paid);
     Navigator.pop(context);
   }
 

@@ -28,6 +28,15 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications (added for the Daily
+        // Five local reminder feature) -- its AAR metadata declares a
+        // dependency on Java 8+ APIs (java.time, etc.) that aren't natively
+        // available below API 26, so AGP needs to desugar them into the
+        // app's own dex output. This is a standard, documented requirement
+        // for that plugin (see developer.android.com/studio/write/java8-support),
+        // not a project-specific workaround like the toolchain overrides in
+        // ../build.gradle.kts.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     signingConfigs {
@@ -68,4 +77,7 @@ flutter {
 
 dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
+    // Pairs with isCoreLibraryDesugaringEnabled above -- the actual
+    // desugaring implementation, required by flutter_local_notifications.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

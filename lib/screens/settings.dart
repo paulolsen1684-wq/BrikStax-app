@@ -17,6 +17,7 @@ import '../modules/avatar/widgets/den_layout_tuner_screen.dart';
 import 'push_test_screen.dart';
 import 'deal_history_screen.dart';
 import '../services/push_service.dart';
+import '../services/local_notification_service.dart';
 import '../services/device_identity.dart';
 import 'package:http/http.dart' as http;
 
@@ -92,6 +93,14 @@ class _State extends State<SettingsScreen> {
             onTap: () => Navigator.push(context, MaterialPageRoute(
                 builder: (_) => const DealHistoryScreen())),
           ),
+
+          // ── Daily Reminder ───────────────────────────────────────────────
+          // Real, always-visible feature (unlike the FCM push stack below,
+          // which stays dev-gated) -- entirely on-device local
+          // notifications, no server involvement, so there's no rollout
+          // risk in shipping it to everyone from the start.
+          _header(bt, 'Daily Reminder'),
+          const SliverToBoxAdapter(child: _DailyReminderOptIn()),
 
           // ── Notifications ────────────────────────────────────────────────
           // Real feature UI (not a raw test screen), but still dev-gated
@@ -697,6 +706,72 @@ class _State extends State<SettingsScreen> {
 // same underlying pieces push_test_screen.dart exercises individually for
 // debugging, wired together here as the actual one-tap flow a real user
 // would see once this ships past dev-only.
+// ── Daily Five reminder opt-in (real, non-dev-gated) ────────────────────────
+// Entirely local notifications -- no Firebase, no server round-trip, so
+// unlike _NotificationsOptIn below this ships for every user from the
+// start. Turning it on schedules today's reminder immediately (if today's
+// tasks aren't already done); LocalNotificationService itself handles
+// canceling it the moment they are, from DailyFiveService.markDone/the
+// daily claim, not from anything in this widget.
+class _DailyReminderOptIn extends StatefulWidget {
+  const _DailyReminderOptIn();
+  @override State<_DailyReminderOptIn> createState() => _DailyReminderOptInState();
+}
+
+class _DailyReminderOptInState extends State<_DailyReminderOptIn> {
+  final _svc = LocalNotificationService.instance;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _svc.addListener(_onChange);
+  }
+
+  @override
+  void dispose() {
+    _svc.removeListener(_onChange);
+    super.dispose();
+  }
+
+  void _onChange() { if (mounted) setState(() {}); }
+
+  Future<void> _toggle(bool value) async {
+    setState(() => _busy = true);
+    await _svc.setOptedIn(value);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bt = context.bt;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: bt.cardBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: bt.cardBorder, width: BT.bw),
+        ),
+        child: SwitchListTile(
+          activeColor: BT.green,
+          title: Text('Remind me about the Daily Five',
+              style: BT.body(size: 14, weight: FontWeight.w700, color: bt.tx)),
+          subtitle: Text(
+            _svc.optedIn
+                ? 'On — a nudge in the evening if today\'s 5 aren\'t done yet.'
+                : 'A gentle evening nudge, only if you haven\'t checked in yet today.',
+            style: BT.mono(size: 9, color: bt.tx3),
+          ),
+          value: _svc.optedIn,
+          onChanged: _busy ? null : _toggle,
+        ),
+      ),
+    );
+  }
+}
+
 class _NotificationsOptIn extends StatefulWidget {
   const _NotificationsOptIn();
   @override State<_NotificationsOptIn> createState() => _NotificationsOptInState();

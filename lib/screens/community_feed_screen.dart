@@ -2,7 +2,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../utils/haptics.dart';
@@ -14,6 +13,7 @@ import '../modules/avatar/services/loot_service.dart';
 import '../services/feature_flag_service.dart';
 import '../services/device_identity.dart';
 import '../utils/image_privacy.dart';
+import '../utils/image_letterbox.dart';
 
 class CommunityFeedScreen extends StatelessWidget {
   const CommunityFeedScreen({super.key});
@@ -547,34 +547,26 @@ class _UploadSheetState extends State<_UploadSheet> {
         source: source, maxWidth: 1600, imageQuality: 85);
     if (picked == null) return;
 
-    // Fixed 4:3 crop — the user drags/pinches to choose WHICH PART of the
-    // photo to keep, but the aspect ratio itself is locked so every feed
-    // photo displays consistently.
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: picked.path,
-      compressQuality: 85,
-      aspectRatio: const CropAspectRatio(ratioX: 4, ratioY: 3),
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Choose what to share',
-          toolbarColor: const Color(0xFF0A0907),
-          toolbarWidgetColor: const Color(0xFFFFCB00),
-          statusBarColor: const Color(0xFF0A0907),
-          backgroundColor: const Color(0xFF121212),
-          activeControlsWidgetColor: const Color(0xFFFFCB00),
-          lockAspectRatio: true,
-        ),
-      ],
-    );
-    if (cropped == null) return;
+    // Pad to 4:3 instead of cropping to it -- was a locked-aspect
+    // image_cropper step before, which forced the user to choose what part
+    // of a tall/narrow photo (e.g. a portrait phone shot) to CUT OFF to
+    // fit the box. A crop tool has no "shrink to fit and pad the rest"
+    // mode, so there was no cropper setting that could avoid losing
+    // content -- switched to compositing the whole photo onto a 4:3 canvas
+    // with solid bars filling the leftover space instead. Every feed photo
+    // still displays at a consistent 4:3 (see the AspectRatio widgets
+    // elsewhere in this file), but nothing from the original photo is ever
+    // cut off.
+    final padded = await ImageLetterbox.pad(File(picked.path));
+    final imageFile = padded ?? File(picked.path);
 
     // Strip EXIF/GPS metadata before this photo ever gets attached to an
     // upload. Re-encodes the file from scratch so no location data,
     // device info, or other metadata survives — see ImagePrivacy for why
-    // this approach is more reliable than assuming the cropper already
+    // this approach is more reliable than assuming some other step already
     // did it.
-    final cleaned = await ImagePrivacy.stripMetadata(File(cropped.path));
-    setState(() => _image = cleaned ?? File(cropped.path));
+    final cleaned = await ImagePrivacy.stripMetadata(imageFile);
+    setState(() => _image = cleaned ?? imageFile);
   }
 
 
