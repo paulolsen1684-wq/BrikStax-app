@@ -328,8 +328,9 @@
         <div class="card">
             <label style="margin-bottom: 12px;">How it works</label>
             <ol class="steps">
-                <li>Enter every <strong>LEGO set number</strong> (e.g. <code>75192</code>) you're building — comma-separated or one per line, up to 20 at once.</li>
-                <li>Click <strong>Merge Parts</strong>. Each set's full piece list is pulled from Rebrickable and combined into one list — the same part in the same color from two different sets becomes a single row with quantities added together, not two separate rows.</li>
+                <li>Enter every <strong>official LEGO set number</strong> (e.g. <code>75192</code>) you're building — comma-separated or one per line, up to 20 at once.</li>
+                <li>Building a <strong>MOC</strong> too? Rebrickable's API doesn't include MOC data, but you can export a MOC's own parts list as CSV from its page on rebrickable.com (look for "Download as CSV" on the Parts List tab) — upload one or more of those files below and they'll be folded into the same merge.</li>
+                <li>Click <strong>Merge Parts</strong>. Every set and uploaded CSV's piece list is combined into one list — the same part in the same color from two different sources becomes a single row with quantities added together, not two separate rows.</li>
                 <li>Download the CSV and import it into BrickLink's wanted list, or use it to cross-check LEGO's Pick-a-Brick catalog by hand.</li>
             </ol>
             <p style="font-size: 12px; color: #999; margin-top: 14px;">
@@ -350,7 +351,11 @@
         <div class="card">
             <label for="setIds">Set numbers (comma-separated or one per line)</label>
             <textarea id="setIds" placeholder="Examples: 75192, 75340&#10;Or paste one per line"></textarea>
-            <p class="tagline" style="margin: -8px 0 16px;">Up to 20 at once. Quantities are summed across every set you enter. Official LEGO sets only — Rebrickable removed MOC data from their API in 2020.</p>
+            <p class="tagline" style="margin: -8px 0 16px;">Up to 20 at once. Quantities are summed across every set and CSV you include.</p>
+
+            <label for="mocCsvFiles">MOC parts lists (optional — Rebrickable CSV export, one file per MOC)</label>
+            <input type="file" id="mocCsvFiles" accept=".csv,text/csv" multiple>
+            <p class="tagline" style="margin: -8px 0 16px;">Rebrickable's API doesn't serve MOC data, so these can't be looked up by ID — export the parts list as CSV from the MOC's own page instead. Any CSV with recognizable Part/Color/Quantity columns works, so a Rebrickable set export or a previously downloaded BrikStax merge also works here.</p>
 
             <div class="controls">
                 <button onclick="mergeParts()">MERGE PARTS</button>
@@ -373,10 +378,19 @@
     <script>
         let mergedData = null;
 
+        // Official sets still go through the worker (Rebrickable API, keyed
+        // by set number). MOCs never can -- Rebrickable dropped MOC data
+        // from the API in 2020 -- so those come in as a CSV the user exports
+        // by hand from the MOC's own Rebrickable page instead. Both paths
+        // end up as the same row shape and get merged client-side below;
+        // the worker itself doesn't need to know MOCs exist.
         async function mergeParts() {
             const input = document.getElementById('setIds').value.trim();
-            if (!input) {
-                showError('Please enter at least one set number');
+            const fileInput = document.getElementById('mocCsvFiles');
+            const files = fileInput.files ? Array.from(fileInput.files) : [];
+
+            if (!input && files.length === 0) {
+                showError('Enter at least one set number and/or upload a MOC parts CSV');
                 return;
             }
 
@@ -385,26 +399,62 @@
             document.getElementById('output').style.display = 'none';
 
             try {
-                const response = await fetch('https://brikstax-worker.paul-olsen1684.workers.dev/parts-merge', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ids: parseIds(input) })
-                });
+                const merged = new Map();
+                const warnings = [];
+                let setCount = 0;
 
-                const data = await response.json();
-                if (!response.ok || data.error) {
-                    // Prefer the specific per-ID reasons (e.g. "MOCs aren't
-                    // supported") over the generic top-level error when
-                    // present -- otherwise a request that's ALL unsupported
-                    // IDs just says "no parts found" with no explanation.
-                    const detail = data.warnings && data.warnings.length
-                        ? data.warnings.join(' ')
-                        : (data.error || ('Server error: ' + response.statusText));
-                    throw new Error(detail);
+                if (input) {
+                    const response = await fetch('https://brikstax-worker.paul-olsen1684.workers.dev/parts-merge', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ids: parseIds(input) })
+                    });
+                    const data = await response.json();
+
+                    if (!response.ok || data.error) {
+                        // Prefer the specific per-ID reasons (e.g. "MOCs
+                        // aren't supported") over the generic top-level
+                        // error -- otherwise a request that's all
+                        // unsupported IDs just says "no parts found" with
+                        // no explanation. If there are CSVs to fall back
+                        // on, don't abort the whole merge over this.
+                        const detail = data.warnings && data.warnings.length
+                            ? data.warnings.join(' ')
+                            : (data.error || ('Server error: ' + response.statusText));
+                        if (files.length === 0) throw new Error(detail);
+                        warnings.push(detail);
+                    } else {
+                        setCount = data.setCount || 0;
+                        if (data.warnings && data.warnings.length) warnings.push(...data.warnings);
+                        // The worker's own CSV ("Part Number,Color ID,Color,
+                        // Quantity,Spare Qty") is just parsed back through
+                        // the same generic reader used for uploads -- one
+                        // merge path instead of two.
+                        const parsed = extractPartsFromCsv(data.csv, 'set lookup');
+                        mergeRowsIntoMap(merged, parsed.rows);
+                    }
                 }
 
-                mergedData = data;
-                displayResults(data);
+                for (const file of files) {
+                    const text = await file.text();
+                    const { rows, warning } = extractPartsFromCsv(text, file.name);
+                    if (warning) warnings.push(warning);
+                    mergeRowsIntoMap(merged, rows);
+                }
+
+                if (merged.size === 0) {
+                    throw new Error(warnings.length ? warnings.join(' ') : 'No parts found');
+                }
+
+                const built = buildCsv(merged);
+                mergedData = {
+                    csv: built.csv,
+                    partCount: built.partCount,
+                    setCount,
+                    mocFileCount: files.length,
+                    warnings
+                };
+                displayResults(mergedData);
             } catch (e) {
                 showError(e.message);
             } finally {
@@ -418,17 +468,138 @@
                 .filter(s => s.length > 0);
         }
 
+        // Minimal CSV reader -- handles quoted fields with embedded commas
+        // or quotes (RFC 4180-ish), which is all that's needed for both
+        // Rebrickable's export and the CSV this page itself produces.
+        function parseCSVText(text) {
+            const rows = [];
+            let row = [], field = '', inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                const c = text[i];
+                if (inQuotes) {
+                    if (c === '"') {
+                        if (text[i + 1] === '"') { field += '"'; i++; }
+                        else inQuotes = false;
+                    } else {
+                        field += c;
+                    }
+                } else if (c === '"') {
+                    inQuotes = true;
+                } else if (c === ',') {
+                    row.push(field); field = '';
+                } else if (c === '\n') {
+                    row.push(field); rows.push(row); row = []; field = '';
+                } else if (c === '\r') {
+                    // ignore -- \n (or end of string) closes the row
+                } else {
+                    field += c;
+                }
+            }
+            if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+            return rows.filter(r => !(r.length === 1 && r[0].trim() === ''));
+        }
+
+        // Header names vary between Rebrickable's own export, this page's
+        // output, and whatever else someone might paste in -- match on a
+        // handful of common spellings per column rather than one exact name.
+        const HEADER_ALIASES = {
+            part: ['part', 'part number', 'part num', 'part no', 'part id', 'part_num', 'design id'],
+            color: ['color', 'color name', 'colour', 'colour name'],
+            colorId: ['color id', 'colour id', 'color_id'],
+            qty: ['quantity', 'qty', 'qty.', 'amount', 'count'],
+            spareQty: ['spare qty', 'spare quantity', 'spare']
+        };
+
+        function matchHeader(headerRow) {
+            const norm = headerRow.map(h => h.trim().toLowerCase());
+            const find = (aliases) => {
+                for (const alias of aliases) {
+                    const idx = norm.indexOf(alias);
+                    if (idx !== -1) return idx;
+                }
+                return -1;
+            };
+            return {
+                part: find(HEADER_ALIASES.part),
+                color: find(HEADER_ALIASES.color),
+                colorId: find(HEADER_ALIASES.colorId),
+                qty: find(HEADER_ALIASES.qty),
+                spareQty: find(HEADER_ALIASES.spareQty)
+            };
+        }
+
+        // Parses one CSV's text into { partNum, color, colorId, qty,
+        // spareQty } rows. `label` is just for the warning message so a bad
+        // file is identifiable when several are uploaded at once.
+        function extractPartsFromCsv(text, label) {
+            const rows = parseCSVText(text);
+            if (rows.length < 2) {
+                return { rows: [], warning: `"${label}" doesn't look like a CSV (no data rows found)` };
+            }
+            const cols = matchHeader(rows[0]);
+            if (cols.part === -1 || cols.qty === -1) {
+                return { rows: [], warning: `"${label}" is missing a recognizable Part/Quantity column -- expected a Rebrickable parts-list export` };
+            }
+            const out = [];
+            let skipped = 0;
+            for (let i = 1; i < rows.length; i++) {
+                const r = rows[i];
+                const partNum = (r[cols.part] || '').trim();
+                const qty = parseInt(r[cols.qty], 10);
+                if (!partNum || !Number.isFinite(qty) || qty <= 0) { skipped++; continue; }
+                out.push({
+                    partNum,
+                    color: cols.color !== -1 ? ((r[cols.color] || '').trim() || 'Unknown') : 'Unknown',
+                    colorId: cols.colorId !== -1 ? (r[cols.colorId] || '').trim() : '',
+                    qty,
+                    spareQty: cols.spareQty !== -1 ? (parseInt(r[cols.spareQty], 10) || 0) : 0
+                });
+            }
+            const warning = skipped > 0
+                ? `"${label}": skipped ${skipped} row${skipped === 1 ? '' : 's'} without a valid part number + quantity`
+                : null;
+            return { rows: out, warning };
+        }
+
+        // Same part in the same color -> one row, quantities added, whether
+        // it came from a set lookup or an uploaded CSV. Keyed on part number
+        // + color name (lowercased) rather than color ID, since uploaded
+        // CSVs often don't carry a numeric color ID at all.
+        function mergeRowsIntoMap(map, rows) {
+            for (const r of rows) {
+                const key = `${r.partNum}__${(r.color || 'unknown').toLowerCase()}`;
+                if (!map.has(key)) {
+                    map.set(key, { partNum: r.partNum, colorId: r.colorId || '', color: r.color || 'Unknown', qty: 0, spareQty: 0 });
+                }
+                const entry = map.get(key);
+                if (!entry.colorId && r.colorId) entry.colorId = r.colorId;
+                entry.qty += r.qty;
+                entry.spareQty += r.spareQty || 0;
+            }
+        }
+
+        function buildCsv(map) {
+            const rows = [...map.values()].sort((a, b) => a.partNum.localeCompare(b.partNum));
+            let csv = 'Part Number,Color ID,Color,Quantity,Spare Qty\n';
+            for (const p of rows) {
+                const colorField = p.color.includes(',') ? `"${p.color}"` : p.color;
+                csv += `${p.partNum},${p.colorId},${colorField},${p.qty},${p.spareQty}\n`;
+            }
+            return { csv, partCount: rows.length };
+        }
+
         function displayResults(data) {
             document.getElementById('output').style.display = 'block';
 
             // Real warnings now: which entered IDs the worker couldn't find
-            // parts for (typo, wrong format, doesn't exist) -- not a
-            // fabricated "these parts were replaced" claim. See
+            // parts for (typo, wrong format, doesn't exist), plus any
+            // uploaded CSV that didn't parse cleanly -- not a fabricated
+            // "these parts were replaced" claim. See
             // PARTS_MERGE_WORKER.js / worker.js's handlePartsMerge for why.
             if (data.warnings && data.warnings.length > 0) {
                 const warningHtml = `
                     <div class="warning">
-                        <strong>⚠️ Some IDs couldn't be found</strong>
+                        <strong>⚠️ Some input couldn't be used as-is</strong>
                         ${data.warnings.map(w => `• ${w}`).join('<br>')}
                     </div>
                 `;
@@ -437,8 +608,13 @@
                 document.getElementById('warningContainer').innerHTML = '';
             }
 
+            const sources = [];
+            if (data.setCount) sources.push(`${data.setCount} set${data.setCount === 1 ? '' : 's'}`);
+            if (data.mocFileCount) sources.push(`${data.mocFileCount} MOC CSV${data.mocFileCount === 1 ? '' : 's'}`);
+            const sourceText = sources.length ? sources.join(' + ') : 'your input';
+
             document.getElementById('summary').textContent =
-                `${data.partCount} distinct part+color combos across ${data.setCount} set${data.setCount === 1 ? '' : 's'}. ` +
+                `${data.partCount} distinct part+color combos across ${sourceText}. ` +
                 `"Spare Qty" is extra pieces already included in the box for that part -- subtract those from what you actually need to buy.`;
 
             document.getElementById('results').textContent = data.csv || '';
@@ -459,6 +635,7 @@
 
         function clearForm() {
             document.getElementById('setIds').value = '';
+            document.getElementById('mocCsvFiles').value = '';
             document.getElementById('output').style.display = 'none';
             document.getElementById('error').style.display = 'none';
             mergedData = null;
