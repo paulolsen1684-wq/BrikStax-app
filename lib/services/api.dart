@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'constants.dart';
 import 'storage.dart';
 import '../models/brickset_extras.dart';
+import '../models/checker_part.dart';
 
 class Api {
   Api._();
@@ -93,6 +94,28 @@ class Api {
       if (name != null) d['theme_name'] = name;
     }
     return d;
+  }
+
+  /// Full piece checklist for a set (images, needed qty per part+color) --
+  /// the same Worker endpoint cloudflare-site/checker.html has always used
+  /// (GET /parts?set=, see handleParts in cloudflare-worker/worker.js), now
+  /// also the backend for the native Parts Checker screen. Returns null on
+  /// any failure (bad set number, network error) -- callers show a generic
+  /// "couldn't load" message, matching fetchSet's own null-on-failure style.
+  Future<({CheckerSetInfo set, List<CheckerPart> parts})?> fetchPartsChecklist(
+      String num) async {
+    final d = await _get(Uri.parse(
+        '${K.workerUrl}parts?set=${Uri.encodeComponent(num)}'));
+    if (d == null) return null;
+    final s = d['set'] as Map<String, dynamic>?;
+    final p = d['parts'] as List<dynamic>?;
+    if (s == null || p == null) return null;
+    return (
+      set: CheckerSetInfo.fromJson(s),
+      parts: p
+          .map((e) => CheckerPart.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
   }
 
   /// Resolve theme_id → full name (e.g. 246 → "Star Wars > UCS")

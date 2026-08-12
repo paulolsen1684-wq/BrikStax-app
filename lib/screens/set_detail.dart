@@ -12,6 +12,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/atoms.dart';
 import '../widgets/sheets.dart';
+import 'parts_checker_screen.dart';
 
 class SetDetailScreen extends StatefulWidget {
   final String setId;
@@ -1009,6 +1010,34 @@ class _DetailsTabState extends State<_DetailsTab> {
           ),
         ]),
         const SizedBox(height: 12),
+
+        // Check Parts -- only meaningful for a set you've actually opened;
+        // a sealed set has no "missing pieces" question to ask yet.
+        if (s.status == 'open') ...[
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => PartsCheckerScreen(
+                    initialNum: s.num, ownedSetName: s.name))),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: bt.cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: bt.cardBorder, width: BT.bw),
+                boxShadow: [BoxShadow(color: bt.shadowColor,
+                    offset: const Offset(2, 2))],
+              ),
+              child: Row(children: [
+                const Text('🧩', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Check for missing pieces',
+                    style: BT.body(size: 14, color: bt.tx))),
+                Icon(Icons.chevron_right, color: bt.txMuted, size: 18),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
 
         // Purchase source
         GestureDetector(

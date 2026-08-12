@@ -27,6 +27,7 @@ import '../modules/avatar/widgets/hidden_themes_screen.dart';
 import '../modules/avatar/widgets/deal_of_day_card.dart';
 import '../modules/avatar/widgets/wishlist_dashboard_card.dart';
 import '../modules/avatar/widgets/set_lookup_card.dart';
+import '../modules/avatar/widgets/parts_checker_card.dart';
 import '../modules/avatar/data/backgrounds_art.dart' as bgArt;
 
 class DashboardScreen extends StatelessWidget {
@@ -222,6 +223,12 @@ class DashboardScreen extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: SetLookupCard(),
+            ),
+          ),
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: PartsCheckerCard(),
             ),
           ),
           const SliverToBoxAdapter(child: _NewsFeed()),
