@@ -28,6 +28,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../modules/avatar/services/dev_mode.dart';
 
 class PushService extends ChangeNotifier {
   PushService._();
@@ -36,6 +37,23 @@ class PushService extends ChangeNotifier {
   static const String _baseUrl =
       'https://brikstax-worker.paul-olsen1684.workers.dev';
   static const String topicAllUsers = 'all_users';
+
+  // Dev-only side channel, subscribed to only when DevMode.instance.isOn --
+  // the same gate that currently protects this whole service from ever
+  // running on a real user's device. Exists specifically because
+  // lego-rewards-watcher (a separate personal Cloudflare Worker, outside
+  // this repo, monitoring LEGO Insiders Rewards) piggybacks on this app's
+  // push infra to alert its owner -- before this topic existed it sent to
+  // topicAllUsers directly, which was harmless only because push itself
+  // was dev-gated (the developer's device was the sole subscriber). The
+  // moment push stops being dev-gated for real users, anyone who opts in
+  // would start getting those personal LEGO alerts too. Fixed 2026-08-12:
+  // lego-rewards-watcher now sends here instead -- see that Worker's own
+  // sendBrikStaxPush(). If push ever needs a broadcast channel that
+  // genuinely should reach only non-dev real users, that's a third topic,
+  // not a repurposing of either of these two.
+  static const String topicDevAlerts = 'dev_alerts';
+
   static const String _kOptedInKey  = 'push_opted_in';
 
   bool _firebaseReady = false;
@@ -163,6 +181,9 @@ class PushService extends ChangeNotifier {
       return;
     }
     await FirebaseMessaging.instance.subscribeToTopic(topicAllUsers);
+    if (DevMode.instance.isOn) {
+      await FirebaseMessaging.instance.subscribeToTopic(topicDevAlerts);
+    }
     await registerToken(userId);
     notifyListeners();
   }
@@ -186,12 +207,20 @@ class PushService extends ChangeNotifier {
         return;
       }
       await FirebaseMessaging.instance.subscribeToTopic(topicAllUsers);
+      if (DevMode.instance.isOn) {
+        await FirebaseMessaging.instance.subscribeToTopic(topicDevAlerts);
+      }
       await registerToken(userId);
       _optedIn = true;
     } else {
       if (_firebaseReady) {
         try {
           await FirebaseMessaging.instance.unsubscribeFromTopic(topicAllUsers);
+          // Unsubscribing from a topic never subscribed to is a harmless
+          // no-op on FCM's side -- always attempt this rather than
+          // re-checking DevMode.isOn, so a dev who flips DevMode off
+          // between opting in and opting out still cleanly unsubscribes.
+          await FirebaseMessaging.instance.unsubscribeFromTopic(topicDevAlerts);
         } catch (_) {
           // Best effort -- not being able to unsubscribe shouldn't block
           // turning the toggle off locally.
