@@ -1,0 +1,7 @@
+# partchecker.pages.dev is a retired standalone duplicate of the Parts
+# Checker tool. The real, actively-maintained version now lives at
+# brikstax.pages.dev/checker (part of the main BrikStax site, kept in sync
+# with the rest of its design system). This project is kept alive only to
+# 301-redirect anyone who still has partchecker.pages.dev bookmarked or
+# linked, rather than serving stale content or a hard 404.
+/*  https://brikstax.pages.dev/checker  301
