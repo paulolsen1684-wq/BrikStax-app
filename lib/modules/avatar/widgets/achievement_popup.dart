@@ -250,13 +250,13 @@ class _AchievementPopupState extends State<AchievementPopup>
     return base;
   }
 
-  String _spriteSlotEmoji(sprite.CosmeticSlot slot) => switch (slot) {
-    sprite.CosmeticSlot.head       => '🟡',
-    sprite.CosmeticSlot.helmet     => '⛑️',
-    sprite.CosmeticSlot.outfit     => '👕',
-    sprite.CosmeticSlot.accessory  => '✋',
-    sprite.CosmeticSlot.background => '🖼️',
-  };
+  // CosmeticSlot only has one value now (background) -- the figure-slot
+  // cases this used to switch over (head/helmet/outfit/accessory) were
+  // removed 2026-08-12 along with the rest of the retired figure catalog's
+  // leftovers in sprite_cosmetics.dart. See _pixelSlotEmoji below for the
+  // figure-slot equivalent, which is what achievements.dart's cosmeticId
+  // values actually resolve against now.
+  String _spriteSlotEmoji(sprite.CosmeticSlot slot) => '🖼️';
 
   String _pixelSlotEmoji(pixel.PixelSlot slot) => switch (slot) {
     pixel.PixelSlot.head  => '🟡',

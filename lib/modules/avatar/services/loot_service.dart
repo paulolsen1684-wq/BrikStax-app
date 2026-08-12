@@ -43,16 +43,13 @@ class _RewardEntry {
 }
 
 // Starter items every player begins with -- excluded from the pool, same
-// as the old catalog's isDefault flag did. head_01/helmet_38/outfit_34 are
-// STALE: ids from the old sprite figure catalog (helmet/outfit), retired
-// along with the rest of that system -- sprite.allSpriteCosmetics has no
-// entries with these ids anymore, so this part of the filter is already a
-// harmless no-op. Left as-is rather than cleaned up now since it's
-// genuinely inert, not wrong; only 'bg_cream' still does real work here
-// (excluding the starter background from the sprite side of the pool).
-// The pixel side of the pool below uses AvatarState.starterIds instead,
-// which is the actually-current starter set.
-const _starterIds = {'head_01', 'helmet_38', 'outfit_34', 'bg_cream'};
+// as the old catalog's isDefault flag did. Only the sprite (background)
+// side of the pool uses this; the pixel side below uses
+// AvatarState.starterIds instead, which is the figure catalog's starter
+// set. 'bg_cream' is the only entry now -- head_01/helmet_38/outfit_34
+// (stale ids from the retired figure catalog) were removed 2026-08-12
+// along with the rest of that system's leftovers.
+const _starterIds = {'bg_cream'};
 
 // isSecret sprite cosmetics are excluded from the normal pool -- they'd
 // otherwise just be an ordinary roll at whatever rarity they're tagged,

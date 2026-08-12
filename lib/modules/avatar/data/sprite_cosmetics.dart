@@ -1,21 +1,21 @@
 // lib/modules/avatar/data/sprite_cosmetics.dart
 //
-// BACKGROUNDS ONLY now. The figure catalog this file used to hold (helmet/
-// head/outfit/accessory -- ~130 detailed-crop PNG entries) was retired
-// wholesale in favor of the ground-up pixel-art system (data/pixel_cosmetics.dart,
+// BACKGROUNDS ONLY now, and still the live, load-bearing catalog for all 52
+// of them -- despite the filename, this is not legacy/dead code. The figure
+// catalog this file used to hold (helmet/head/outfit/accessory -- ~130
+// detailed-crop PNG entries) was retired wholesale in favor of the
+// ground-up pixel-art system (data/pixel_cosmetics.dart,
 // widgets/pixel_avatar_widget.dart). Backgrounds stayed here on purpose:
 // none of the pixel-art batch is background art, backgrounds render through
-// an entirely separate procedural path (backgrounds_art.dart), and there
+// an entirely separate image/palette path (backgrounds_art.dart), and there
 // was no reason to touch a system that wasn't part of the cutover.
 //
-// The CosmeticSlot enum below still declares helmet/head/outfit/accessory
-// even though no catalog entry uses them anymore -- several switch
-// statements elsewhere (achievement_service.dart, bundle_popup.dart,
-// achievement_popup.dart, loot_roll_widget.dart, loot_service.dart) match
-// exhaustively over this enum and were left as harmless no-ops on those
-// cases rather than hunted down one by one. Safe to actually delete the
-// unused enum values (and those switch cases) once nothing references them
-// -- not done yet, just not urgent since they're unreachable, not wrong.
+// 2026-08-12: removed the last leftovers from the retired figure catalog --
+// the CosmeticSlot values (helmet/head/outfit/accessory) and the
+// AccessoryPlacement/HeadCoverage enums + SpriteCosmetic.placement/coverage/
+// outfitWidthScale/frames fields no catalog entry (all 52 are `background`)
+// had used since the cutover. Confirmed nothing referenced them before
+// deleting -- see git history if any of this is ever needed for reference.
 //
 // assetPath is unused for background entries -- rendering goes through
 // backgrounds_art.dart's palette/image lookup by id, not Image.asset.
@@ -24,22 +24,8 @@
 
 import 'package:flutter/material.dart';
 
-enum CosmeticSlot { helmet, head, outfit, accessory, background }
+enum CosmeticSlot { background }
 enum SpriteRarity { common, uncommon, rare, epic, legendary }
-
-// Where an accessory renders and what it draws behind/in front of. Only
-// meaningful when slot == accessory.
-//   held     -- at the hand, drawn in front of everything (sword, mug)
-//   ground   -- beside the feet, drawn behind the outfit (pet, potted plant)
-//   floating -- hovering near the character, drawn in front (star, halo)
-//   worn     -- body-mounted, drawn behind the outfit so edges peek out (backpack)
-enum AccessoryPlacement { held, ground, floating, worn }
-
-// Whether a helmet sits on top of the head (default) or covers the whole
-// face. Only meaningful when slot == helmet. A `full` helmet hides the
-// head layer entirely while equipped -- no partial masking, no mismatch
-// risk between head art and a helmet-specific mask shape.
-enum HeadCoverage { topper, full }
 
 extension SpriteRarityX on SpriteRarity {
   Color get color => switch (this) {
@@ -65,70 +51,19 @@ class SpriteCosmetic {
   final String assetPath;
   final SpriteRarity rarity;
 
-  // Optional animation frames for epic/legendary gear (e.g.
-  // ['outfits_19.png', 'outfits_19_f2.png', 'outfits_19_f3.png', 'outfits_19_f4.png']).
-  // Null/empty means the item is static -- renderFrames falls back to
-  // [assetPath] so nothing needs a frame list until the art actually exists.
-  final List<String>? frames;
-
-  // held is the constructor default; every accessory_XX entry currently
-  // overrides it to ground (rendered beside the feet, behind the outfit).
-  final AccessoryPlacement placement;
-  final HeadCoverage coverage;
-
-  // Outfit-only. The 40 outfit crops split into two batches with visibly
-  // different body proportions -- slim garments average height-to-width
-  // ~1.64 (shoulder-to-feet content height / canvas width), bulky
-  // suits/armor/robes average ~1.25 (same silhouette width reads as a
-  // shorter body because the costume itself is wider, e.g. shoulder
-  // pads/puffy sleeves). sprite_avatar_widget.dart's outfit compositing
-  // fits every outfit to the SAME rendered width (see its slot == outfit
-  // branch) so the shoulder-to-feet height stays consistent across
-  // outfits regardless of neck-margin cropping differences -- but that
-  // scheme alone conflates "wider costume" with "shorter body," so a
-  // bulky suit ends up looking shrunken (a visible gap under the head)
-  // next to a slim one at the same width. This multiplier corrects for
-  // that: computed per outfit as target-ratio / (this outfit's own
-  // ratio), so bulky outfits render wider (>1.0) and slim ones render
-  // slightly narrower (<1.0) until the displayed shoulder-to-feet height
-  // matches across the whole catalog.
-  //
-  // shoulderY itself went through two measurement passes: the first
-  // (single-row, 85%-of-max-width, 2px column stride) was too coarse and
-  // both over- and under-shot depending on the outfit. The current values
-  // come from a full-Y-resolution scan requiring width to hit 88% of max
-  // and hold above 80% for 4 more rows (short enough to not overshoot
-  // past the true shoulder line into "cape/robe fully flared out"
-  // territory the way an earlier 20-row-plateau attempt did for
-  // cape-heavy outfits like Golden Minifigure Suit and Dragon Rider's
-  // Scale Vest).
-  //
-  // target-ratio lands the displayed body height at ~92% of the outfit
-  // region's own height budget, not 100% -- a small margin against
-  // residual shoulderY error so it clips excess neck margin instead of
-  // real shoulder content. An earlier pass used 85%, sized to cover the
-  // coarser first-pass shoulderY's much larger error; with the refined
-  // measurement above that margin was excessive and visibly UNDER-filled
-  // outfits that had little or no real neck margin to begin with (e.g.
-  // Corduroy Jacket, shoulderY=0 -- there was never ambiguity there to
-  // guard against). Still an automated heuristic, not hand-verified per
-  // outfit -- if a specific outfit is still visibly off, that one
-  // outfit's shoulderY is the thing to re-measure by eye, not this
-  // target/margin again. 1.0 for every non-outfit slot (irrelevant there).
-  final double outfitWidthScale;
-
   // When true AND not yet unlocked, the catalog grid (_SpriteTile in
   // avatar_editor.dart) hides the name behind "???" and swaps the padlock
   // for a sparkle icon instead of revealing what it is -- an ordinary
   // locked item still tells you its name/rarity as something to work
   // toward; a secret item is meant to be a genuine surprise the first
-  // time it's granted. Has no effect once the id is in unlockedIds.
+  // time it's granted. Has no effect once the id is in unlockedIds. No
+  // background currently sets this true -- the pixel catalog's secret item
+  // (px_item_secretxwing) is the only one live right now, see
+  // secret_item_service.dart.
   final bool isSecret;
 
-  // Background-only flavor text (e.g. "Something stirs at midnight.") shown
-  // in the loot roll popup. Null for every non-background slot, which
-  // synthesizes its own description ("Rare Helmet" etc.) instead -- see
-  // loot_roll_widget.dart's _RewardInfo.resolve.
+  // Flavor text (e.g. "Something stirs at midnight.") shown in the loot
+  // roll popup.
   final String? description;
 
   const SpriteCosmetic({
@@ -137,18 +72,9 @@ class SpriteCosmetic {
     required this.slot,
     required this.assetPath,
     required this.rarity,
-    this.frames,
-    this.placement = AccessoryPlacement.held,
-    this.coverage = HeadCoverage.topper,
-    this.outfitWidthScale = 1.0,
     this.isSecret = false,
     this.description,
   });
-
-  List<String> get renderFrames =>
-      (frames != null && frames!.isNotEmpty) ? frames! : [assetPath];
-
-  bool get isAnimated => renderFrames.length > 1;
 }
 
 const List<SpriteCosmetic> allSpriteCosmetics = [
