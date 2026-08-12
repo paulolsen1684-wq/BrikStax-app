@@ -2,6 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>
+  // Applied before first paint so a saved dark-mode choice doesn't flash
+  // light for a moment -- same snippet on every BrikStax site page.
+  (function() {
+    try {
+      var saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    } catch (e) {}
+  })();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BrikStax Parts Checker</title>
 <style>
@@ -500,7 +510,8 @@
 const WORKER = 'https://brikstax-worker.paul-olsen1684.workers.dev';
 let parts = [], owned = {};
 
-// ── Theme ─────────────────────────────────────────────────────────────────────
+// ── Theme ── (data-theme is already applied pre-paint by the <head>
+// snippet; this just wires the button and keeps its label in sync)
 function toggleTheme() {
   const html = document.documentElement;
   const isDark = html.getAttribute('data-theme') === 'dark'
@@ -511,7 +522,6 @@ function toggleTheme() {
 }
 (function() {
   const saved = localStorage.getItem('theme');
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
   const isDark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('theme-toggle').textContent = isDark ? '☀ Light' : '🌙 Dark';

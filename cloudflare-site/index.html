@@ -3,6 +3,16 @@
 <head>
 
 <meta charset="UTF-8">
+<script>
+  // Applied before first paint so a saved dark-mode choice doesn't flash
+  // light for a moment -- same snippet on every BrikStax site page.
+  (function() {
+    try {
+      var saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    } catch (e) {}
+  })();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name='impact-site-verification' value='e00b081b-9d93-43bc-863d-90df89060d0e'>
 <title>BrikStax — Track Your LEGO Collection</title>
@@ -221,6 +231,8 @@
   .btn:active { transform: translate(0,0); box-shadow: 0 0 0 var(--border); }
   .btn:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
   .btn-primary { background: var(--yellow); }
+  .btn-outline { background: transparent; box-shadow: none; }
+  .btn-outline:hover { box-shadow: var(--shadow-sm); }
   .btn-nav { padding: 8px 14px; font-size: 13px; }
 
   /* ── hero ─────────────────────────────────────────────────────── */
@@ -408,8 +420,6 @@
     background: var(--ink2);
     color: var(--cream);
   }
-  :root[data-theme="dark"] .trust-strip,
-  @media (prefers-color-scheme: dark) { .trust-strip {} }
   .trust-inner {
     display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
     padding: 30px 0;
@@ -476,6 +486,7 @@
     <div style="display:flex; align-items:center; gap:16px;">
       <a class="mono" style="font-size:13px; font-weight:500; text-decoration:none;" href="/checker">Parts Checker</a>
       <a class="mono" style="font-size:13px; font-weight:500; text-decoration:none;" href="/parts-merger">Parts Merger</a>
+      <button id="theme-toggle" class="btn btn-outline btn-nav" onclick="toggleTheme()" type="button">☀ Light</button>
       <a class="btn btn-primary btn-nav" href="#get">Join the Beta</a>
     </div>
   </div>
@@ -621,5 +632,24 @@
   </div>
 </footer>
 
+<script>
+  // ── Theme ── (data-theme is already applied pre-paint by the <head>
+  // snippet; this just wires the button and keeps its label in sync)
+  function toggleTheme() {
+    var html = document.documentElement;
+    var isDark = html.getAttribute('data-theme') === 'dark'
+      || (!html.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    document.getElementById('theme-toggle').textContent = isDark ? '🌙 Dark' : '☀ Light';
+    localStorage.setItem('theme', isDark ? 'light' : 'dark');
+  }
+  (function() {
+    var saved = localStorage.getItem('theme');
+    var isDark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('theme-toggle').textContent = isDark ? '☀ Light' : '🌙 Dark';
+    });
+  })();
+</script>
 </body>
 </html>
