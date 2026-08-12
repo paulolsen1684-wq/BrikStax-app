@@ -429,7 +429,7 @@
                 <li>Enter every <strong>official LEGO set number</strong> (e.g. <code>75192</code>) you're building — comma-separated or one per line, up to 20 at once.</li>
                 <li>Building a <strong>MOC</strong> too? Rebrickable's API doesn't include MOC data, but you can export a MOC's own parts list as CSV from its page on rebrickable.com (look for "Download as CSV" on the Parts List tab) — upload one or more of those files below and they'll be folded into the same merge.</li>
                 <li>Click <strong>Merge Parts</strong>. Every set and uploaded CSV's piece list is combined into one list — the same part in the same color from two different sources becomes a single row with quantities added together, not two separate rows.</li>
-                <li>Download the CSV and import it into BrickLink's wanted list, or use it to cross-check LEGO's Pick-a-Brick catalog by hand.</li>
+                <li>Get two files: a <strong>BrickLink Wanted List XML</strong> you upload straight into BrickLink, and a plain <strong>PAB/reference CSV</strong> for manually cross-checking LEGO's Pick-a-Brick catalog (which has no bulk-upload feature to import into at all).</li>
             </ol>
             <p style="font-size: 12px; color: var(--tx2); margin-top: 14px;">
                 The <strong style="color: var(--tx);">Spare Qty</strong> column is pieces LEGO already includes extra in the box for that part — if you're keeping a set you already own, you may need fewer of that part from BrickLink than the main Quantity column shows.
@@ -438,7 +438,7 @@
             <div class="example" style="margin-top: 16px;">
                 <span class="lbl">Example input</span>
                 <span class="in">75192, 60380</span>
-                <span class="lbl">Example output (excerpt)</span>
+                <span class="lbl">Example PAB/reference CSV output (excerpt)</span>
 <span class="out">Part Number,Color ID,Color,Quantity,Spare Qty
 3001,0,Black,40,2
 3005,71,Light Bluish Gray,18,0
@@ -468,8 +468,22 @@
             <h2 style="font-size: 24px; margin-bottom: 16px;">Results</h2>
             <div id="warningContainer"></div>
             <p class="tagline" id="summary" style="margin-bottom: 8px;"></p>
+            <p class="tagline" style="margin-bottom: 8px;">Raw text below is the PAB/reference CSV, shown for a quick look — it's not meant to be pasted anywhere. Use the two download buttons for the actual files.</p>
             <div class="results" id="results"></div>
-            <button class="btn btn-primary" type="button" onclick="downloadResults()" style="margin-top: 16px; width: auto;">DOWNLOAD CSV</button>
+
+            <div class="controls" style="margin-top: 16px; margin-bottom: 0;">
+                <button class="btn btn-primary" type="button" onclick="downloadPabCsv()">⬇ PAB / REFERENCE CSV</button>
+                <button class="btn btn-primary" type="button" onclick="downloadBrickLinkXml()">⬇ BRICKLINK XML</button>
+            </div>
+
+            <div style="margin-top: 14px; display: grid; gap: 10px;">
+                <p class="tagline" style="line-height: 1.6;">
+                    <strong style="color: var(--tx); text-transform: none; letter-spacing: 0;">PAB / Reference CSV</strong> — not directly importable anywhere. LEGO's Pick-a-Brick store has no bulk-upload feature to put it into, and BrickLink's Wanted List uploader wants XML, not this. It's a checklist for shopping either one by hand.
+                </p>
+                <p class="tagline" style="line-height: 1.6;">
+                    <strong style="color: var(--tx); text-transform: none; letter-spacing: 0;">BrickLink XML</strong> — imports directly. On BrickLink: Wanted List → Upload → "Upload BrickLink XML format," then choose the downloaded file (BrickLink requires picking the actual file there, not pasting text). Rows that couldn't be matched to a BrickLink part/color id are left out of this file — see the warning above if that applies to your merge.
+                </p>
+            </div>
         </div>
     </div>
 
@@ -563,10 +577,17 @@
                     throw new Error(warnings.length ? warnings.join(' ') : 'No parts found');
                 }
 
-                const built = buildCsv(merged);
+                const pab = buildPabCsv(merged);
+                const bl = buildBrickLinkXml(merged);
+                if (bl.skipped > 0) {
+                    warnings.push(`${bl.skipped} part+color combo${bl.skipped === 1 ? '' : 's'} couldn't be matched to a BrickLink part/color id (usually MOC-CSV rows, since Rebrickable's website export doesn't include BrickLink ids) and ${bl.skipped === 1 ? "isn't" : "aren't"} in the BrickLink XML -- still in the PAB/reference CSV below.`);
+                }
+
                 mergedData = {
-                    csv: built.csv,
-                    partCount: built.partCount,
+                    csv: pab.csv,
+                    partCount: pab.partCount,
+                    xml: bl.xml,
+                    xmlItemCount: bl.itemCount,
                     setCount,
                     mocFileCount: files.length,
                     warnings
@@ -624,7 +645,13 @@
             color: ['color', 'color name', 'colour', 'colour name'],
             colorId: ['color id', 'colour id', 'color_id'],
             qty: ['quantity', 'qty', 'qty.', 'amount', 'count'],
-            spareQty: ['spare qty', 'spare quantity', 'spare']
+            spareQty: ['spare qty', 'spare quantity', 'spare'],
+            // Only ever populated by the worker's own CSV today (Rebrickable's
+            // website export has no such columns) -- kept as header aliases
+            // rather than hardcoded positions so a future/manual CSV with
+            // these columns still gets picked up.
+            blPart: ['bricklink part number', 'bricklink part', 'bl part number', 'bl part id', 'bl itemid'],
+            blColorId: ['bricklink color id', 'bl color id', 'bricklink color']
         };
 
         function matchHeader(headerRow) {
@@ -641,13 +668,16 @@
                 color: find(HEADER_ALIASES.color),
                 colorId: find(HEADER_ALIASES.colorId),
                 qty: find(HEADER_ALIASES.qty),
-                spareQty: find(HEADER_ALIASES.spareQty)
+                spareQty: find(HEADER_ALIASES.spareQty),
+                blPart: find(HEADER_ALIASES.blPart),
+                blColorId: find(HEADER_ALIASES.blColorId)
             };
         }
 
         // Parses one CSV's text into { partNum, color, colorId, qty,
-        // spareQty } rows. `label` is just for the warning message so a bad
-        // file is identifiable when several are uploaded at once.
+        // spareQty, blPartNum, blColorId } rows. `label` is just for the
+        // warning message so a bad file is identifiable when several are
+        // uploaded at once.
         function extractPartsFromCsv(text, label) {
             const rows = parseCSVText(text);
             if (rows.length < 2) {
@@ -669,7 +699,9 @@
                     color: cols.color !== -1 ? ((r[cols.color] || '').trim() || 'Unknown') : 'Unknown',
                     colorId: cols.colorId !== -1 ? (r[cols.colorId] || '').trim() : '',
                     qty,
-                    spareQty: cols.spareQty !== -1 ? (parseInt(r[cols.spareQty], 10) || 0) : 0
+                    spareQty: cols.spareQty !== -1 ? (parseInt(r[cols.spareQty], 10) || 0) : 0,
+                    blPartNum: cols.blPart !== -1 ? (r[cols.blPart] || '').trim() : '',
+                    blColorId: cols.blColorId !== -1 ? (r[cols.blColorId] || '').trim() : ''
                 });
             }
             const warning = skipped > 0
@@ -686,16 +718,22 @@
             for (const r of rows) {
                 const key = `${r.partNum}__${(r.color || 'unknown').toLowerCase()}`;
                 if (!map.has(key)) {
-                    map.set(key, { partNum: r.partNum, colorId: r.colorId || '', color: r.color || 'Unknown', qty: 0, spareQty: 0 });
+                    map.set(key, { partNum: r.partNum, colorId: r.colorId || '', color: r.color || 'Unknown', qty: 0, spareQty: 0, blPartNum: r.blPartNum || '', blColorId: r.blColorId || '' });
                 }
                 const entry = map.get(key);
                 if (!entry.colorId && r.colorId) entry.colorId = r.colorId;
+                if (!entry.blPartNum && r.blPartNum) entry.blPartNum = r.blPartNum;
+                if (!entry.blColorId && r.blColorId) entry.blColorId = r.blColorId;
                 entry.qty += r.qty;
                 entry.spareQty += r.spareQty || 0;
             }
         }
 
-        function buildCsv(map) {
+        // The plain, human-readable output -- NOT importable anywhere.
+        // LEGO's Pick-a-Brick store has no bulk-upload feature at all, and
+        // BrickLink's Wanted List reader wants XML (see buildBrickLinkXml
+        // below), not this shape. It's a manual checklist, full stop.
+        function buildPabCsv(map) {
             const rows = [...map.values()].sort((a, b) => a.partNum.localeCompare(b.partNum));
             let csv = 'Part Number,Color ID,Color,Quantity,Spare Qty\n';
             for (const p of rows) {
@@ -703,6 +741,37 @@
                 csv += `${p.partNum},${p.colorId},${colorField},${p.qty},${p.spareQty}\n`;
             }
             return { csv, partCount: rows.length };
+        }
+
+        function xmlEscape(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // BrickLink's Wanted List upload format -- confirmed against
+        // BrickLink's own docs (help.asp?helpID=2567 and helpID=207):
+        // ITEMTYPE/ITEMID/COLOR/MINQTY, no XML declaration (BrickLink's
+        // uploader rejects one), uploaded as an actual file, not pasted
+        // text. ITEMID/COLOR must be BrickLink's OWN numbering, not
+        // Rebrickable's -- see the worker's blPartNum/blColorId comment for
+        // where those come from. A row missing either is left out rather
+        // than guessed at; `skipped` lets the caller say how many and why.
+        function buildBrickLinkXml(map) {
+            const rows = [...map.values()].sort((a, b) => a.partNum.localeCompare(b.partNum));
+            let itemCount = 0, skipped = 0;
+            let xml = '<INVENTORY>\n';
+            for (const p of rows) {
+                if (!p.blPartNum || !p.blColorId) { skipped++; continue; }
+                itemCount++;
+                xml += '  <ITEM>\n';
+                xml += '    <ITEMTYPE>P</ITEMTYPE>\n';
+                xml += `    <ITEMID>${xmlEscape(p.blPartNum)}</ITEMID>\n`;
+                xml += `    <COLOR>${xmlEscape(p.blColorId)}</COLOR>\n`;
+                xml += `    <MINQTY>${p.qty}</MINQTY>\n`;
+                xml += '    <CONDITION>N</CONDITION>\n';
+                xml += '  </ITEM>\n';
+            }
+            xml += '</INVENTORY>';
+            return { xml, itemCount, skipped };
         }
 
         function displayResults(data) {
@@ -731,21 +800,38 @@
             const sourceText = sources.length ? sources.join(' + ') : 'your input';
 
             document.getElementById('summary').textContent =
-                `${data.partCount} distinct part+color combos across ${sourceText}. ` +
+                `${data.partCount} distinct part+color combos across ${sourceText} -- ${data.xmlItemCount} of them matched a BrickLink id and are in the XML below. ` +
                 `"Spare Qty" is extra pieces already included in the box for that part -- subtract those from what you actually need to buy.`;
 
             document.getElementById('results').textContent = data.csv || '';
         }
 
-        function downloadResults() {
+        function downloadPabCsv() {
             if (!mergedData) return;
 
-            const csv = mergedData.csv || '';
-            const blob = new Blob([csv], { type: 'text/csv' });
+            const blob = new Blob([mergedData.csv || ''], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `brikstax-parts-${Date.now()}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadBrickLinkXml() {
+            if (!mergedData) return;
+            if (!mergedData.xmlItemCount) {
+                showError("None of the merged parts could be matched to a BrickLink id, so there's nothing to put in the XML -- see the warning above for why.");
+                return;
+            }
+
+            // No XML declaration -- BrickLink's uploader rejects a wanted
+            // list that has one.
+            const blob = new Blob([mergedData.xml || ''], { type: 'application/xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `brikstax-wanted-list-${Date.now()}.xml`;
             a.click();
             URL.revokeObjectURL(url);
         }

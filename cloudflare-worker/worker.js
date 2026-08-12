@@ -1871,13 +1871,25 @@ async function handlePartsMerge(req, env) {
       for (const p of allParts) {
         const key = `${p.part.part_num}__${p.color.id}`;
         if (!partsMap.has(key)) {
+          // Rebrickable's part/color objects already carry each catalog's
+          // own numbering under external_ids -- BrickLink's part number and
+          // color ID are NOT the same as Rebrickable's, so this is the only
+          // correct source for a BrickLink-importable output. Not every
+          // part/color has a known BrickLink mapping; blPartNum/blColorId
+          // stay "" when absent and the client skips those rows out of the
+          // XML rather than emitting a wrong or blank id.
+          const blPartNum = p.part.external_ids?.BrickLink?.[0] || "";
+          const blColorIdRaw = p.color.external_ids?.BrickLink?.ext_ids?.[0];
+          const blColorId = blColorIdRaw === void 0 || blColorIdRaw === null ? "" : String(blColorIdRaw);
           partsMap.set(key, {
             partNum: p.part.part_num,
             name: p.part.name,
             colorId: p.color.id,
             color: p.color.name,
             qty: 0,
-            spareQty: 0
+            spareQty: 0,
+            blPartNum,
+            blColorId
           });
         }
         const entry = partsMap.get(key);
@@ -1892,10 +1904,10 @@ async function handlePartsMerge(req, env) {
     return json({ success: false, error: "No parts found for any of the given IDs", warnings: failed }, 404);
   }
   const parts = [...partsMap.values()].sort((a, b) => a.partNum.localeCompare(b.partNum));
-  let csv = "Part Number,Color ID,Color,Quantity,Spare Qty\n";
+  let csv = "Part Number,BrickLink Part Number,Color ID,BrickLink Color ID,Color,Quantity,Spare Qty\n";
   for (const p of parts) {
     const colorField = p.color.includes(",") ? `"${p.color}"` : p.color;
-    csv += `${p.partNum},${p.colorId},${colorField},${p.qty},${p.spareQty}
+    csv += `${p.partNum},${p.blPartNum},${p.colorId},${p.blColorId},${colorField},${p.qty},${p.spareQty}
 `;
   }
   return json({
