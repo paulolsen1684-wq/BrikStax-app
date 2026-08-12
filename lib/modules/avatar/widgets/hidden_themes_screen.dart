@@ -5,7 +5,7 @@ import '../../../providers/collection.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/app_themes.dart';
 import '../data/hidden_themes.dart';
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../services/hidden_theme_service.dart';
 
 class HiddenThemesScreen extends StatefulWidget {
@@ -220,7 +220,7 @@ class _State extends State<HiddenThemesScreen> {
           ),
           const SizedBox(height: 8),
           Builder(builder: (_) {
-            final rewardName = sprite.spriteCosmeticsById[tier.rewardCosmetic]?.name;
+            final rewardName = bg.backgroundCosmeticsById[tier.rewardCosmetic]?.name;
             return Text(
               '🎁 Reward: ${rewardName ?? tier.rewardCosmetic}',
               style: BT.mono(size: 9, color: bt.tx3),

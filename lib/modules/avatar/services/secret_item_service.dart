@@ -1,8 +1,8 @@
 // lib/modules/avatar/services/secret_item_service.dart
 //
 // Secret cosmetics (isSecret: true, either PixelCosmetic in
-// pixel_cosmetics.dart -- e.g. px_item_secretxwing -- or SpriteCosmetic in
-// sprite_cosmetics.dart, though no background currently sets it) are
+// pixel_cosmetics.dart -- e.g. px_item_secretxwing -- or BackgroundCosmetic
+// in background_cosmetics.dart, though no background currently sets it) are
 // reachable two ways:
 //   1. A hidden magic code, entered through Add Set exactly like DevMode's
 //      magic set number -- CollectionProvider.addSet checks this service
@@ -21,13 +21,13 @@
 // nothing. Removed rather than repointed at a real id, since no secret
 // item has been designated as code-unlockable yet; add a fresh {code: id}
 // entry here once one is. Also fixed handleCode()/_grant() to check the
-// pixel catalog as well as sprite -- they only ever checked
-// spriteCosmeticsById, so a code pointed at a pixel id (where secret items
-// actually live now, e.g. px_item_secretxwing) would have hit this exact
-// same silent-failure mode again.
+// pixel catalog as well as background -- they only ever checked
+// backgroundCosmeticsById, so a code pointed at a pixel id (where secret
+// items actually live now, e.g. px_item_secretxwing) would have hit this
+// exact same silent-failure mode again.
 //
 // To add a new secret item once its art exists:
-//   1. Add its PixelCosmetic (or SpriteCosmetic, for a background) entry
+//   1. Add its PixelCosmetic (or BackgroundCosmetic, for a background) entry
 //      with isSecret: true and a frames: [...] list if it should animate.
 //   2. Optionally add a {code: id} pair to SecretItemCodes.byCode below,
 //      if it should also be reachable by code (not required -- an
@@ -36,13 +36,13 @@
 // Nothing else needs to change; the loot pool and catalog-grid hiding key
 // off isSecret generically, on both catalogs.
 import '../data/pixel_cosmetics.dart';
-import '../data/sprite_cosmetics.dart';
+import '../data/background_cosmetics.dart';
 import 'achievement_service.dart';
 
 class SecretItemCodes {
   SecretItemCodes._();
 
-  // Magic set numbers -> the cosmetic id they grant (sprite or pixel
+  // Magic set numbers -> the cosmetic id they grant (background or pixel
   // catalog id, either works -- see handleCode below). Pick codes the same
   // way DevMode's was picked: not a real/plausible LEGO set number, so it
   // can never collide with something a tester or player actually types.
@@ -70,9 +70,9 @@ class SecretItemService {
       if (_norm(entry.key) != target) continue;
       // Checks both catalogs -- a code-registered id could point at either
       // one, same as every other cross-catalog lookup in this system
-      // (LootService.rarityOf does the same sprite-then-pixel fallback).
+      // (LootService.rarityOf does the same background-then-pixel fallback).
       final id = entry.value;
-      final name = spriteCosmeticsById[id]?.name ?? pixelCosmeticsById[id]?.name;
+      final name = backgroundCosmeticsById[id]?.name ?? pixelCosmeticsById[id]?.name;
       if (name == null) return null; // code registered but id typo'd/missing
       await _grant(id);
       return name;

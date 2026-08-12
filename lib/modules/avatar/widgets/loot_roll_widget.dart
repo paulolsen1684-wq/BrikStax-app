@@ -6,7 +6,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../data/pixel_cosmetics.dart' as pixel;
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../models/loot_roll.dart';
 import '../services/achievement_service.dart';
 import 'avatar_widget.dart';
@@ -14,8 +14,8 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/brick_burst.dart';
 
 /// Unifies a rolled reward's display info -- a roll can resolve to either
-/// catalog now (sprite = background, pixel = head/hat/torso/legs/item), so
-/// this carries whichever one matched rather than assuming sprite the way
+/// catalog (bg = background, pixel = head/hat/torso/legs/item), so this
+/// carries whichever one matched rather than assuming background the way
 /// it did back when the pixel catalog wasn't in the loot pool yet.
 class _RewardInfo {
   final String name;
@@ -23,12 +23,12 @@ class _RewardInfo {
   final Color rarityColor;
   final String rarityLabel;
   // 0..1, common=0 through legendary=1 -- drives how elaborate the reveal
-  // burst is (see BrickBurstOverlay below). Both SpriteRarity and
+  // burst is (see BrickBurstOverlay below). Both CosmeticRarity and
   // PixelRarity are the same 5-value {common, uncommon, rare, epic,
   // legendary} ordering, so rarity.index / 4.0 works generically for
   // either catalog without needing two separate scales.
   final double burstIntensity;
-  final sprite.SpriteCosmetic? spriteCosmetic;
+  final bg.BackgroundCosmetic? bgCosmetic;
   final pixel.PixelCosmetic? pixelCosmetic;
   const _RewardInfo({
     required this.name,
@@ -36,12 +36,12 @@ class _RewardInfo {
     required this.rarityColor,
     required this.rarityLabel,
     required this.burstIntensity,
-    this.spriteCosmetic,
+    this.bgCosmetic,
     this.pixelCosmetic,
   });
 
   static _RewardInfo? resolve(String id) {
-    final sc = sprite.spriteCosmeticsById[id];
+    final sc = bg.backgroundCosmeticsById[id];
     if (sc != null) {
       return _RewardInfo(
         name: sc.name,
@@ -51,7 +51,7 @@ class _RewardInfo {
         rarityColor: sc.rarity.color,
         rarityLabel: sc.rarity.label,
         burstIntensity: sc.rarity.index / 4.0,
-        spriteCosmetic: sc,
+        bgCosmetic: sc,
       );
     }
     final pc = pixel.pixelCosmeticsById[id];
@@ -310,15 +310,15 @@ class _LootRollWidgetState extends State<LootRollWidget>
   Widget _buildReveal(_RewardInfo? reward) {
     if (reward == null) return const SizedBox();
     final state = AchievementService.instance.state;
-    final sc = reward.spriteCosmetic;
+    final sc = reward.bgCosmetic;
     final pc = reward.pixelCosmetic;
-    // Sprite side of the pool is backgrounds-only post-cutover, so any
-    // sprite match here is a background. Pixel side can be any figure slot
+    // Background side of the pool is backgrounds-only, so any match there
+    // is a background. Pixel side can be any figure slot
     // -- equip into whichever field that slot maps to so the reveal
     // preview actually shows the item on the figure, not just unlocks it
     // invisibly.
     final previewState = sc != null
-        ? (sc.slot == sprite.CosmeticSlot.background
+        ? (sc.slot == bg.CosmeticSlot.background
             ? state.copyWith(backgroundId: sc.id)
             : state)
         : pc != null

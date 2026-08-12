@@ -1,13 +1,13 @@
 // lib/modules/avatar/services/loot_service.dart
 //
-// The loot pool is every SpriteCosmetic (backgrounds) PLUS every
+// The loot pool is every BackgroundCosmetic (backgrounds) PLUS every
 // PixelCosmetic (head/hat/torso/legs/item -- the live figure catalog) minus
 // each slot's starter/default item (nobody should "win" the thing they
 // already start with) and minus anything reserved for a hidden theme /
 // bundle / secret drop. Pixel items joined the pool once the catalog grew
 // past a small preview batch and got real rarity data -- see
-// PixelRarityX.asSpriteRarity for how its 4 tiers map onto this file's
-// existing 5-tier SpriteRarity economy rather than needing a second one.
+// PixelRarityX.asCosmeticRarity for how its 4 tiers map onto this file's
+// existing 5-tier CosmeticRarity economy rather than needing a second one.
 import 'dart:convert';
 import 'dart:math';
 import 'package:sqflite/sqflite.dart';
@@ -16,7 +16,7 @@ import '../../../providers/collection.dart';
 import '../data/bundles.dart';
 import '../data/hidden_themes.dart';
 import '../data/pixel_cosmetics.dart' as pixel;
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../models/avatar_state.dart';
 import '../models/bundle.dart';
 import '../models/loot_roll.dart';
@@ -38,12 +38,12 @@ class ClaimResult {
 /// so the roll/pool logic doesn't need to care which catalog it came from.
 class _RewardEntry {
   final String id;
-  final sprite.SpriteRarity rarity;
+  final bg.CosmeticRarity rarity;
   const _RewardEntry(this.id, this.rarity);
 }
 
 // Starter items every player begins with -- excluded from the pool, same
-// as the old catalog's isDefault flag did. Only the sprite (background)
+// as the old catalog's isDefault flag did. Only the background
 // side of the pool uses this; the pixel side below uses
 // AvatarState.starterIds instead, which is the figure catalog's starter
 // set. 'bg_cream' is the only entry now -- head_01/helmet_38/outfit_34
@@ -51,7 +51,7 @@ class _RewardEntry {
 // along with the rest of that system's leftovers.
 const _starterIds = {'bg_cream'};
 
-// isSecret sprite cosmetics are excluded from the normal pool -- they'd
+// isSecret background cosmetics are excluded from the normal pool -- they'd
 // otherwise just be an ordinary roll at whatever rarity they're tagged,
 // no rarer than any other legendary item. _maybeSecretDrop below is the
 // separate, much-lower-odds check that actually reaches them.
@@ -66,7 +66,7 @@ final Set<String> _themeAndBundleIds = {
 };
 
 List<_RewardEntry> get _rewardPool => [
-  ...sprite.allSpriteCosmetics
+  ...bg.allBackgroundCosmetics
       .where((c) =>
           !_starterIds.contains(c.id) &&
           !c.isSecret &&
@@ -77,7 +77,7 @@ List<_RewardEntry> get _rewardPool => [
           !AvatarState.starterIds.contains(c.id) &&
           !c.isSecret &&
           !_themeAndBundleIds.contains(c.id))
-      .map((c) => _RewardEntry(c.id, c.rarity.asSpriteRarity)),
+      .map((c) => _RewardEntry(c.id, c.rarity.asCosmeticRarity)),
 ];
 
 class LootService {
@@ -97,22 +97,22 @@ class LootService {
   // ── Briks economy table ────────────────────────────────────────────────
   // Dupe payout = full rarity value. Guaranteed roll cost = same number,
   // so 2 dupes of a tier always buy 1 roll of the tier above.
-  static int brikValue(sprite.SpriteRarity r) => switch (r) {
-    sprite.SpriteRarity.common    => 1,
-    sprite.SpriteRarity.uncommon  => 2,
-    sprite.SpriteRarity.rare      => 4,
-    sprite.SpriteRarity.epic      => 8,
-    sprite.SpriteRarity.legendary => 16,
+  static int brikValue(bg.CosmeticRarity r) => switch (r) {
+    bg.CosmeticRarity.common    => 1,
+    bg.CosmeticRarity.uncommon  => 2,
+    bg.CosmeticRarity.rare      => 4,
+    bg.CosmeticRarity.epic      => 8,
+    bg.CosmeticRarity.legendary => 16,
   };
 
-  static int brikCost(sprite.SpriteRarity r) => brikValue(r);
+  static int brikCost(bg.CosmeticRarity r) => brikValue(r);
 
-  /// Rarity of any catalog id, sprite (background) or pixel (figure) -- used
+  /// Rarity of any catalog id, background or pixel (figure) -- used
   /// to price dupe payouts for grants that don't go through the normal roll
   /// pool (bundle pieces, hidden-theme rewards).
-  sprite.SpriteRarity? rarityOf(String id) =>
-      sprite.spriteCosmeticsById[id]?.rarity ??
-      pixel.pixelCosmeticsById[id]?.rarity.asSpriteRarity;
+  bg.CosmeticRarity? rarityOf(String id) =>
+      bg.backgroundCosmeticsById[id]?.rarity ??
+      pixel.pixelCosmeticsById[id]?.rarity.asCosmeticRarity;
 
   /// Unlocks [id] into [unlockedIds] if it's new; otherwise returns its
   /// rarity's Brik value as dupe compensation (0 if unlocked but newly
@@ -139,7 +139,7 @@ class LootService {
   // rarity on demand should never be able to shortcut a surprise). Checked
   // before the normal tier-distribution roll; a hit replaces that roll for
   // this claim rather than stacking an extra grant on top, keeping "one
-  // thing per claim" simple. Pulls from every isSecret sprite cosmetic the
+  // thing per claim" simple. Pulls from every isSecret background cosmetic the
   // player hasn't already unlocked -- add more by tagging new catalog
   // entries isSecret: true, nothing here needs to change.
   static const double _secretDropChance = 0.015;
@@ -147,7 +147,7 @@ class LootService {
   String? _maybeSecretDrop() {
     final owned = AchievementService.instance.state.unlockedIds;
     final pool = <String>[
-      ...sprite.allSpriteCosmetics
+      ...bg.allBackgroundCosmetics
           .where((c) => c.isSecret && !owned.contains(c.id))
           .map((c) => c.id),
       ...pixel.allPixelCosmetics
@@ -160,7 +160,7 @@ class LootService {
   }
 
   /// How many rewards of [r] the player does NOT yet own.
-  int remainingOfRarity(sprite.SpriteRarity r) {
+  int remainingOfRarity(bg.CosmeticRarity r) {
     final owned = AchievementService.instance.state.unlockedIds;
     return _rewardPool
         .where((c) => c.rarity == r && !owned.contains(c.id))
@@ -291,13 +291,13 @@ class LootService {
     }
 
     // Streak milestone guarantees
-    sprite.SpriteRarity? minRarity;
+    bg.CosmeticRarity? minRarity;
     if (newStreak == 100) {
-      minRarity = sprite.SpriteRarity.legendary;
+      minRarity = bg.CosmeticRarity.legendary;
     } else if (newStreak == 30) {
-      minRarity = sprite.SpriteRarity.epic;
+      minRarity = bg.CosmeticRarity.epic;
     } else if (newStreak == 7) {
-      minRarity = sprite.SpriteRarity.rare;
+      minRarity = bg.CosmeticRarity.rare;
     }
 
     final tier = DailyStreak.tierForStreak(newStreak - 1);
@@ -333,30 +333,30 @@ class LootService {
     );
   }
 
-  String _rollLoot(BrickTier tier, {sprite.SpriteRarity? minRarity}) {
+  String _rollLoot(BrickTier tier, {bg.CosmeticRarity? minRarity}) {
     final double roll = _rng.nextDouble();
 
     // Five-tier odds. Each brick tier has its own distribution.
-    sprite.SpriteRarity target;
+    bg.CosmeticRarity target;
     switch (tier) {
       case BrickTier.epic:
         // 75% legendary / 25% epic
-        target = roll < 0.75 ? sprite.SpriteRarity.legendary : sprite.SpriteRarity.epic;
+        target = roll < 0.75 ? bg.CosmeticRarity.legendary : bg.CosmeticRarity.epic;
         break;
       case BrickTier.rare:
         // 10% uncommon / 40% rare / 38% epic / 12% legendary
-        if (roll < 0.10)      target = sprite.SpriteRarity.uncommon;
-        else if (roll < 0.50) target = sprite.SpriteRarity.rare;
-        else if (roll < 0.88) target = sprite.SpriteRarity.epic;
-        else                  target = sprite.SpriteRarity.legendary;
+        if (roll < 0.10)      target = bg.CosmeticRarity.uncommon;
+        else if (roll < 0.50) target = bg.CosmeticRarity.rare;
+        else if (roll < 0.88) target = bg.CosmeticRarity.epic;
+        else                  target = bg.CosmeticRarity.legendary;
         break;
       case BrickTier.common:
         // 50% common / 30% uncommon / 14% rare / 5% epic / 1% legendary
-        if (roll < 0.50)      target = sprite.SpriteRarity.common;
-        else if (roll < 0.80) target = sprite.SpriteRarity.uncommon;
-        else if (roll < 0.94) target = sprite.SpriteRarity.rare;
-        else if (roll < 0.99) target = sprite.SpriteRarity.epic;
-        else                  target = sprite.SpriteRarity.legendary;
+        if (roll < 0.50)      target = bg.CosmeticRarity.common;
+        else if (roll < 0.80) target = bg.CosmeticRarity.uncommon;
+        else if (roll < 0.94) target = bg.CosmeticRarity.rare;
+        else if (roll < 0.99) target = bg.CosmeticRarity.epic;
+        else                  target = bg.CosmeticRarity.legendary;
     }
 
     // Apply streak milestone guarantee: never roll below minRarity
@@ -387,7 +387,7 @@ class LootService {
   /// Returns null if balance is insufficient or no unowned items of that
   /// rarity remain. Otherwise spends Briks, grants a random unowned reward
   /// of exactly [rarity], and returns the result for the reveal popup.
-  Future<ClaimResult?> buyGuaranteedRoll(sprite.SpriteRarity rarity) async {
+  Future<ClaimResult?> buyGuaranteedRoll(bg.CosmeticRarity rarity) async {
     final cost = brikCost(rarity);
     if (_briks < cost) return null;
 
@@ -410,9 +410,9 @@ class LootService {
       roll: LootRoll(
         cosmeticId: pick.id,
         tier: switch (rarity) {
-          sprite.SpriteRarity.common   => BrickTier.common,
-          sprite.SpriteRarity.uncommon => BrickTier.common,
-          sprite.SpriteRarity.rare     => BrickTier.rare,
+          bg.CosmeticRarity.common   => BrickTier.common,
+          bg.CosmeticRarity.uncommon => BrickTier.common,
+          bg.CosmeticRarity.rare     => BrickTier.rare,
           _                            => BrickTier.epic,
         },
         rolledAt: DateTime.now(),
@@ -422,9 +422,9 @@ class LootService {
 
   // ── Bonus rolls (scanner rewards etc. — wire up when scanner goes live) ──
   /// Grants a free roll, optionally with a rarity floor. First-ever barcode
-  /// scan should call this with minRarity: SpriteRarity.epic; every 10th
+  /// scan should call this with minRarity: CosmeticRarity.epic; every 10th
   /// scan calls it with no floor.
-  Future<ClaimResult?> grantBonusRoll({sprite.SpriteRarity? minRarity}) async {
+  Future<ClaimResult?> grantBonusRoll({bg.CosmeticRarity? minRarity}) async {
     final roll = _maybeSecretDrop() ?? _rollLoot(BrickTier.common, minRarity: minRarity);
     final svc     = AchievementService.instance;
     final state   = svc.state;
@@ -543,13 +543,13 @@ class LootService {
     }
     state = state.copyWith(unlockedIds: newUnlocked);
 
-    // Equip each piece -- background resolves against the sprite catalog,
+    // Equip each piece -- background resolves against the background catalog,
     // every figure slot (head/hat/torso/legs/item) against the pixel
     // catalog now that bundle.cosmeticIds points at it.
     for (final id in bundle.cosmeticIds) {
-      final sc = sprite.spriteCosmeticsById[id];
+      final sc = bg.backgroundCosmeticsById[id];
       if (sc != null) {
-        if (sc.slot == sprite.CosmeticSlot.background) {
+        if (sc.slot == bg.CosmeticSlot.background) {
           state = state.copyWith(backgroundId: id);
         }
         continue;

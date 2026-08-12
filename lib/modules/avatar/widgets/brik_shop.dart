@@ -1,6 +1,6 @@
 // lib/modules/avatar/widgets/brik_shop.dart
 import 'package:flutter/material.dart';
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../services/loot_service.dart';
 import 'loot_roll_widget.dart';
 import '../../../theme/app_theme.dart';
@@ -28,13 +28,13 @@ class _BrikShopState extends State<BrikShop> {
   bool _buying = false;
 
   static const _offers = [
-    (sprite.SpriteRarity.uncommon,  'Uncommon Roll',  Color(0xFF2E7D32)),
-    (sprite.SpriteRarity.rare,      'Rare Roll',      Color(0xFF006CB7)),
-    (sprite.SpriteRarity.epic,      'Epic Roll',      Color(0xFF8B00FF)),
-    (sprite.SpriteRarity.legendary, 'Legendary Roll', Color(0xFFFFCB00)),
+    (bg.CosmeticRarity.uncommon,  'Uncommon Roll',  Color(0xFF2E7D32)),
+    (bg.CosmeticRarity.rare,      'Rare Roll',      Color(0xFF006CB7)),
+    (bg.CosmeticRarity.epic,      'Epic Roll',      Color(0xFF8B00FF)),
+    (bg.CosmeticRarity.legendary, 'Legendary Roll', Color(0xFFFFCB00)),
   ];
 
-  Future<void> _buy(sprite.SpriteRarity rarity) async {
+  Future<void> _buy(bg.CosmeticRarity rarity) async {
     if (_buying) return;
     setState(() => _buying = true);
     final result = await LootService.instance.buyGuaranteedRoll(rarity);
@@ -173,7 +173,7 @@ class _BrikShopState extends State<BrikShop> {
                     child: Text('🧱 $cost',
                         style: BT.body(size: 13,
                             color: enabled
-                                ? (rarity == sprite.SpriteRarity.legendary
+                                ? (rarity == bg.CosmeticRarity.legendary
                                     ? BT.ink : Colors.white)
                                 : BT.txMuted)),
                   ),

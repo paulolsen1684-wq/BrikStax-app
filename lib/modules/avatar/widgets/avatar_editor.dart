@@ -10,11 +10,11 @@
 // a slot isn't something that needs unlocking.
 //
 // Background is untouched: still its own tab/picker (_bgGrid/_BgTile)
-// against the sprite catalog's now-backgrounds-only data, since none of
-// the pixel-art cutover touched backgrounds.
+// against background_cosmetics.dart's data, since none of the pixel-art
+// cutover touched backgrounds.
 
 import 'package:flutter/material.dart';
-import '../data/sprite_cosmetics.dart';
+import '../data/background_cosmetics.dart';
 import '../data/pixel_cosmetics.dart';
 import '../data/backgrounds_art.dart' as bgArt;
 import '../models/avatar_state.dart';
@@ -230,8 +230,8 @@ class _EditorState extends State<AvatarEditorScreen>
     final locked   = items.where((c) => !unlockedIds.contains(c.id)).toList();
 
     const tierOrder = [
-      SpriteRarity.common, SpriteRarity.uncommon, SpriteRarity.rare,
-      SpriteRarity.epic, SpriteRarity.legendary,
+      CosmeticRarity.common, CosmeticRarity.uncommon, CosmeticRarity.rare,
+      CosmeticRarity.epic, CosmeticRarity.legendary,
     ];
 
     return CustomScrollView(slivers: [
@@ -258,9 +258,9 @@ class _EditorState extends State<AvatarEditorScreen>
     ]);
   }
 
-  List<Widget> _pixelTierSection(BrikStaxColors bt, List<PixelCosmetic> all, SpriteRarity tier,
+  List<Widget> _pixelTierSection(BrikStaxColors bt, List<PixelCosmetic> all, CosmeticRarity tier,
       AchievementService svc, String? equippedId) {
-    final items = all.where((c) => c.rarity.asSpriteRarity == tier).toList();
+    final items = all.where((c) => c.rarity.asCosmeticRarity == tier).toList();
     if (items.isEmpty) return [];
     return [
       SliverToBoxAdapter(
@@ -395,11 +395,12 @@ class _EditorState extends State<AvatarEditorScreen>
     );
   }
 
-  // Background lives in the sprite catalog (now backgrounds-only) --
-  // unaffected by the pixel-art cutover. Still its own grid/tile because
-  // _BgTile's preview is a color swatch, not an Image.asset.
+  // Background lives in background_cosmetics.dart -- unaffected by the
+  // pixel-art cutover. Still its own grid/tile because _BgTile's preview is
+  // a color swatch, not an Image.asset. allBackgroundCosmetics directly,
+  // not a slot filter -- CosmeticSlot only has the one value now.
   Widget _bgGrid(BrikStaxColors bt, AchievementService svc, AvatarState avatarState) {
-    final items = spriteCosmeticsForSlot(CosmeticSlot.background);
+    final items = allBackgroundCosmetics;
     final equippedId = avatarState.backgroundId;
     final unlockedIds = svc.state.unlockedIds;
 
@@ -407,8 +408,8 @@ class _EditorState extends State<AvatarEditorScreen>
     final locked   = items.where((c) => !unlockedIds.contains(c.id)).toList();
 
     const tierOrder = [
-      SpriteRarity.common, SpriteRarity.uncommon, SpriteRarity.rare,
-      SpriteRarity.epic, SpriteRarity.legendary,
+      CosmeticRarity.common, CosmeticRarity.uncommon, CosmeticRarity.rare,
+      CosmeticRarity.epic, CosmeticRarity.legendary,
     ];
 
     return CustomScrollView(slivers: [
@@ -424,7 +425,7 @@ class _EditorState extends State<AvatarEditorScreen>
     ]);
   }
 
-  List<Widget> _bgTierSection(BrikStaxColors bt, List<SpriteCosmetic> all, SpriteRarity tier,
+  List<Widget> _bgTierSection(BrikStaxColors bt, List<BackgroundCosmetic> all, CosmeticRarity tier,
       AchievementService svc, String? equippedId) {
     final items = all.where((c) => c.rarity == tier).toList();
     if (items.isEmpty) return [];
@@ -452,7 +453,7 @@ class _EditorState extends State<AvatarEditorScreen>
                 cosmetic: cosmetic,
                 unlocked: svc.state.unlockedIds.contains(cosmetic.id),
                 equipped: equippedId == cosmetic.id,
-                onTap: () => svc.equipSprite(cosmetic),
+                onTap: () => svc.equipBackground(cosmetic),
               );
             },
             childCount: items.length,
@@ -482,8 +483,8 @@ class _PixelTile extends StatelessWidget {
     // "???") instead of the ordinary lock treatment -- an ordinary locked
     // item still tells you what it is as something to work toward; a
     // secret is meant to be a genuine surprise the first time it's
-    // granted. Has no effect once unlocked. Mirrors SpriteCosmetic.isSecret
-    // 's identical rule on the old catalog's _SpriteTile.
+    // granted. Has no effect once unlocked. Mirrors BackgroundCosmetic
+    // .isSecret's identical rule on _BgTile below.
     final hideSecret = !unlocked && cosmetic.isSecret;
     return GestureDetector(
       onTap: unlocked ? onTap : null,
@@ -572,7 +573,7 @@ class _NoneTile extends StatelessWidget {
 // background in the picker read as a flat color block even for ids with a
 // real photo.
 class _BgTile extends StatelessWidget {
-  final SpriteCosmetic cosmetic;
+  final BackgroundCosmetic cosmetic;
   final bool unlocked, equipped;
   final VoidCallback onTap;
   const _BgTile({required this.cosmetic, required this.unlocked, required this.equipped, required this.onTap});

@@ -4,7 +4,7 @@
 // applies the same "rarer = more elaborate" reveal language the loot
 // system already uses (see loot_roll_widget.dart), just driven by the
 // set's price instead of a cosmetic's catalog rarity, and reusing the same
-// 5-tier common/uncommon/rare/epic/legendary color scale (SpriteRarityX)
+// 5-tier common/uncommon/rare/epic/legendary color scale (CosmeticRarityX)
 // for visual consistency with the rest of the app's reward language rather
 // than inventing a second palette.
 //
@@ -17,23 +17,23 @@
 // cheap ones, so requiring a tap every time would make adding sets feel
 // like a chore instead of a flourish.
 import 'package:flutter/material.dart';
-import '../modules/avatar/data/sprite_cosmetics.dart' show SpriteRarity, SpriteRarityX;
+import '../modules/avatar/data/background_cosmetics.dart' show CosmeticRarity, CosmeticRarityX;
 import '../theme/app_theme.dart';
 import 'brick_burst.dart';
 
 class _ValueTier {
-  final SpriteRarity rarity;
+  final CosmeticRarity rarity;
   final String label;
   const _ValueTier(this.rarity, this.label);
 }
 
 _ValueTier _tierFor(double? value) {
   final v = value ?? 0;
-  if (v >= 350) return const _ValueTier(SpriteRarity.legendary, 'LEGENDARY ADD!');
-  if (v >= 150) return const _ValueTier(SpriteRarity.epic, 'Awesome!');
-  if (v >= 60)  return const _ValueTier(SpriteRarity.rare, 'Great add!');
-  if (v >= 25)  return const _ValueTier(SpriteRarity.uncommon, 'Nice add!');
-  return const _ValueTier(SpriteRarity.common, 'Added!');
+  if (v >= 350) return const _ValueTier(CosmeticRarity.legendary, 'LEGENDARY ADD!');
+  if (v >= 150) return const _ValueTier(CosmeticRarity.epic, 'Awesome!');
+  if (v >= 60)  return const _ValueTier(CosmeticRarity.rare, 'Great add!');
+  if (v >= 25)  return const _ValueTier(CosmeticRarity.uncommon, 'Nice add!');
+  return const _ValueTier(CosmeticRarity.common, 'Added!');
 }
 
 /// Inserts a brief, self-removing overlay celebrating a just-added set,

@@ -1,9 +1,10 @@
 // lib/modules/avatar/data/achievements.dart
 //
 // cosmeticId values point at the pixel catalog now (data/pixel_cosmetics.dart)
-// for every figure slot, or the sprite catalog (sprite_cosmetics.dart) for the
-// 4 background rewards (bg_*) -- backgrounds never moved. Remapped from the
-// old retired sprite figure catalog (helmet_18/outfit_09/accessory_01 etc.,
+// for every figure slot, or the background catalog (background_cosmetics.dart,
+// renamed 2026-08-12 from sprite_cosmetics.dart) for the 4 background
+// rewards (bg_*) -- backgrounds never moved. Remapped from the old retired
+// figure catalog (helmet_18/outfit_09/accessory_01 etc.,
 // all dead ids post pixel-art cutover) once the pixel catalog had enough
 // items and real rarity data to actually support this. Rarity roughly
 // matches how hard the achievement is to earn; thematic name matches are

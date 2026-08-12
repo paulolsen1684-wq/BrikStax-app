@@ -4,7 +4,7 @@
 // reward, and surfaces them as in-app prompts (no push notifications).
 import '../../../providers/collection.dart';
 import '../data/hidden_themes.dart';
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import 'hidden_theme_service.dart';
 
 enum NearMissKind { theme, trophy }
@@ -62,7 +62,7 @@ class NearMissEngine {
         ThemeTier.diamond => 'Diamond',
       };
       final verifiedNote = tier.verifiedOnly ? ' (verified)' : '';
-      final rewardName = sprite.spriteCosmeticsById[tier.rewardCosmetic]?.name;
+      final rewardName = bg.backgroundCosmeticsById[tier.rewardCosmetic]?.name;
 
       out.add(NearMiss(
         kind: NearMissKind.theme,

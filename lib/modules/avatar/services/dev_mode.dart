@@ -9,7 +9,7 @@
 // string compare. Persists via sqflite (no extra package needed).
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../data/pixel_cosmetics.dart';
 import '../models/avatar_state.dart';
 import 'achievement_service.dart';
@@ -91,7 +91,7 @@ class DevMode {
       // right now is the full background catalog -- still unions both
       // rather than assuming that, so it stays correct once pixel items
       // stop being unlocked-by-default and once more get added.
-      final allIds = sprite.allSpriteCosmetics.map((c) => c.id).toSet()
+      final allIds = bg.allBackgroundCosmetics.map((c) => c.id).toSet()
         ..addAll(allPixelCosmetics.map((c) => c.id));
       await svc.updateState(svc.state.copyWith(unlockedIds: allIds));
     } else {

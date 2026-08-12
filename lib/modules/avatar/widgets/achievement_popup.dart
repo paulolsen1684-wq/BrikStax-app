@@ -6,13 +6,14 @@
 // Only secondary text colors are migrated to bt.* tokens.
 //
 // Achievement rewards resolve against the pixel catalog (figure slots) or
-// the sprite catalog (background) now -- achievements.dart's cosmeticId
-// values were remapped off the retired sprite figure catalog once the
-// pixel catalog had real rarity data to support this.
+// the background catalog (background_cosmetics.dart) now --
+// achievements.dart's cosmeticId values were remapped off the retired
+// figure catalog once the pixel catalog had real rarity data to support
+// this.
 import 'package:flutter/material.dart';
 import '../data/achievements.dart';
 import '../data/pixel_cosmetics.dart' as pixel;
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../models/avatar_state.dart';
 import '../services/achievement_service.dart';
 import 'avatar_widget.dart';
@@ -82,15 +83,15 @@ class _AchievementPopupState extends State<AchievementPopup>
       return const SizedBox();
     }
 
-    final spriteCosmetic = sprite.spriteCosmeticsById[achievement.cosmeticId];
+    final bgCosmetic = bg.backgroundCosmeticsById[achievement.cosmeticId];
     final pixelCosmetic  = pixel.pixelCosmeticsById[achievement.cosmeticId];
-    final hasReward = spriteCosmetic != null || pixelCosmetic != null;
+    final hasReward = bgCosmetic != null || pixelCosmetic != null;
 
-    final rewardName  = spriteCosmetic?.name  ?? pixelCosmetic?.name;
-    final rewardColor = spriteCosmetic?.rarity.color ?? pixelCosmetic?.rarity.color;
-    final rewardLabel = spriteCosmetic?.rarity.label ?? pixelCosmetic?.rarity.label;
-    final rewardEmoji = spriteCosmetic != null
-        ? _spriteSlotEmoji(spriteCosmetic.slot)
+    final rewardName  = bgCosmetic?.name  ?? pixelCosmetic?.name;
+    final rewardColor = bgCosmetic?.rarity.color ?? pixelCosmetic?.rarity.color;
+    final rewardLabel = bgCosmetic?.rarity.label ?? pixelCosmetic?.rarity.label;
+    final rewardEmoji = bgCosmetic != null
+        ? _bgSlotEmoji(bgCosmetic.slot)
         : pixelCosmetic != null
             ? _pixelSlotEmoji(pixelCosmetic.slot)
             : '🖼️';
@@ -169,7 +170,7 @@ class _AchievementPopupState extends State<AchievementPopup>
                 ),
                 const SizedBox(height: 16),
                 AvatarWidget(
-                  state: _previewState(spriteCosmetic, pixelCosmetic),
+                  state: _previewState(bgCosmetic, pixelCosmetic),
                   size: 110,
                 ),
                 const SizedBox(height: 16),
@@ -199,8 +200,8 @@ class _AchievementPopupState extends State<AchievementPopup>
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      if (spriteCosmetic != null) {
-                        AchievementService.instance.equipSprite(spriteCosmetic);
+                      if (bgCosmetic != null) {
+                        AchievementService.instance.equipBackground(bgCosmetic);
                       } else if (pixelCosmetic != null) {
                         AchievementService.instance.equipPixel(pixelCosmetic);
                       }
@@ -230,13 +231,13 @@ class _AchievementPopupState extends State<AchievementPopup>
     );
   }
 
-  // Background resolves against the sprite catalog; every figure slot
+  // Background resolves against the background catalog; every figure slot
   // (head/hat/torso/legs/item) against the pixel catalog now that
   // achievements.dart's cosmeticId values point at it.
-  AvatarState _previewState(sprite.SpriteCosmetic? spriteCosmetic, pixel.PixelCosmetic? pixelCosmetic) {
+  AvatarState _previewState(bg.BackgroundCosmetic? bgCosmetic, pixel.PixelCosmetic? pixelCosmetic) {
     final base = AchievementService.instance.state;
-    if (spriteCosmetic != null && spriteCosmetic.slot == sprite.CosmeticSlot.background) {
-      return base.copyWith(backgroundId: spriteCosmetic.id);
+    if (bgCosmetic != null && bgCosmetic.slot == bg.CosmeticSlot.background) {
+      return base.copyWith(backgroundId: bgCosmetic.id);
     }
     if (pixelCosmetic != null) {
       return switch (pixelCosmetic.slot) {
@@ -253,10 +254,10 @@ class _AchievementPopupState extends State<AchievementPopup>
   // CosmeticSlot only has one value now (background) -- the figure-slot
   // cases this used to switch over (head/helmet/outfit/accessory) were
   // removed 2026-08-12 along with the rest of the retired figure catalog's
-  // leftovers in sprite_cosmetics.dart. See _pixelSlotEmoji below for the
+  // leftovers in background_cosmetics.dart. See _pixelSlotEmoji below for the
   // figure-slot equivalent, which is what achievements.dart's cosmeticId
   // values actually resolve against now.
-  String _spriteSlotEmoji(sprite.CosmeticSlot slot) => '🖼️';
+  String _bgSlotEmoji(bg.CosmeticSlot slot) => '🖼️';
 
   String _pixelSlotEmoji(pixel.PixelSlot slot) => switch (slot) {
     pixel.PixelSlot.head  => '🟡',

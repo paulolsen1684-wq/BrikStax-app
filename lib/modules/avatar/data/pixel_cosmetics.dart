@@ -1,11 +1,11 @@
 ﻿// lib/modules/avatar/data/pixel_cosmetics.dart
 //
 // Catalog for the ground-up pixel-art avatar system -- separate from
-// sprite_cosmetics.dart's SpriteCosmetic on purpose (that file is
+// background_cosmetics.dart's BackgroundCosmetic on purpose (that file is
 // backgrounds-only now). This is the live figure catalog: head/hat/torso/
 // legs/item, rendered through PixelAvatarWidget.
 //
-// Ids are deliberately NOT the same as sprite_cosmetics.dart's (head_01
+// Ids are deliberately NOT the same as background_cosmetics.dart's (head_01
 // etc. already means something there) to avoid any risk of collision.
 //
 // rarity/description are real, load-bearing data now (not just stored
@@ -15,25 +15,25 @@
 // unlocked -- everything else must be earned through the loot/reward
 // system, same as the background catalog always worked.
 import 'package:flutter/material.dart' show Color;
-import 'sprite_cosmetics.dart' show SpriteRarity, SpriteRarityX;
+import 'background_cosmetics.dart' show CosmeticRarity, CosmeticRarityX;
 
 enum PixelSlot { head, hat, torso, legs, item }
 enum PixelRarity { common, uncommon, rare, epic, legendary }
 
-/// Bridges the pixel catalog's rarity onto SpriteRarity's existing scale
+/// Bridges the pixel catalog's rarity onto CosmeticRarity's existing scale
 /// rather than maintaining a second parallel color/label/Brik-value system
 /// -- loot_service.dart's economy (brikValue, roll distribution) and any UI
-/// styling (rarity color/label) both key off SpriteRarity already.
+/// styling (rarity color/label) both key off CosmeticRarity already.
 extension PixelRarityX on PixelRarity {
-  SpriteRarity get asSpriteRarity => switch (this) {
-    PixelRarity.common    => SpriteRarity.common,
-    PixelRarity.uncommon  => SpriteRarity.uncommon,
-    PixelRarity.rare      => SpriteRarity.rare,
-    PixelRarity.epic      => SpriteRarity.epic,
-    PixelRarity.legendary => SpriteRarity.legendary,
+  CosmeticRarity get asCosmeticRarity => switch (this) {
+    PixelRarity.common    => CosmeticRarity.common,
+    PixelRarity.uncommon  => CosmeticRarity.uncommon,
+    PixelRarity.rare      => CosmeticRarity.rare,
+    PixelRarity.epic      => CosmeticRarity.epic,
+    PixelRarity.legendary => CosmeticRarity.legendary,
   };
-  Color get color => asSpriteRarity.color;
-  String get label => asSpriteRarity.label;
+  Color get color => asCosmeticRarity.color;
+  String get label => asCosmeticRarity.label;
 }
 
 class PixelCosmetic {
@@ -46,17 +46,20 @@ class PixelCosmetic {
 
   // Optional animation frames for legendary/secret gear (e.g. a chrome
   // shine sweep, an X-Wing engine flicker). Null/empty means the item is
-  // static -- renderFrames falls back to [assetPath], same pattern as
-  // SpriteCosmetic.frames/renderFrames/isAnimated. PixelAvatarWidget reads
-  // isAnimated to decide whether to run its own frame ticker for that
+  // static -- renderFrames falls back to [assetPath]. PixelAvatarWidget
+  // reads isAnimated to decide whether to run its own frame ticker for that
   // layer at all -- most items are static, so most layers never allocate
-  // one.
+  // one. BackgroundCosmetic has no equivalent -- its own frames/
+  // renderFrames/isAnimated were removed 2026-08-12 as dead code (no
+  // background entry ever set them; rendering for backgrounds never went
+  // through Image.asset in the first place).
   final List<String>? frames;
 
-  // Same semantics as SpriteCosmetic.isSecret: hides the name/preview in
-  // the catalog grid until unlocked, and pulls this item into LootService's
-  // separate low-odds secret-drop pool instead of the normal tiered roll.
-  // Default false since most items are ordinary tiered rewards.
+  // Same semantics as BackgroundCosmetic.isSecret: hides the name/preview
+  // in the catalog grid until unlocked, and pulls this item into
+  // LootService's separate low-odds secret-drop pool instead of the normal
+  // tiered roll. Default false since most items are ordinary tiered
+  // rewards.
   final bool isSecret;
 
   // Per-item nudge on top of the shared slot geometry in pixel_avatar_widget

@@ -6,7 +6,7 @@
 // against the fixed-white card in both light and dark mode.
 import 'package:flutter/material.dart';
 import '../data/pixel_cosmetics.dart' as pixel;
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../models/bundle.dart';
 import '../models/avatar_state.dart';
 import '../services/loot_service.dart';
@@ -57,7 +57,7 @@ class _BundlePopupState extends State<BundlePopup>
   @override
   void dispose() { _ctrl.dispose(); super.dispose(); }
 
-  // Background resolves against the sprite catalog; every figure slot
+  // Background resolves against the background catalog; every figure slot
   // (head/hat/torso/legs/item) against the pixel catalog now that
   // bundles.dart's cosmeticIds point at it. Base state is a blank
   // AvatarState (no head/torso/legs) rather than the player's real
@@ -66,9 +66,9 @@ class _BundlePopupState extends State<BundlePopup>
   AvatarState _bundlePreview() {
     var state = const AvatarState();
     for (final id in widget.bundle.cosmeticIds) {
-      final sc = sprite.spriteCosmeticsById[id];
+      final sc = bg.backgroundCosmeticsById[id];
       if (sc != null) {
-        if (sc.slot == sprite.CosmeticSlot.background) {
+        if (sc.slot == bg.CosmeticSlot.background) {
           state = state.copyWith(backgroundId: id);
         }
         continue;
@@ -151,7 +151,7 @@ class _BundlePopupState extends State<BundlePopup>
                       style: BT.mono(size: 9, color: bt.tx3)),
                   const SizedBox(height: 6),
                   ...bundle.cosmeticIds.map((id) {
-                    final sc = sprite.spriteCosmeticsById[id];
+                    final sc = bg.backgroundCosmeticsById[id];
                     final pc = pixel.pixelCosmeticsById[id];
                     final name  = sc?.name  ?? pc?.name;
                     final color = sc?.rarity.color ?? pc?.rarity.color;

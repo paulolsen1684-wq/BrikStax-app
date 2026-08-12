@@ -1,25 +1,21 @@
 // lib/modules/avatar/services/achievement_service.dart
 //
-// Two equip paths now: equipPixel() for the live figure catalog (head/hat/
-// torso/legs/item, data/pixel_cosmetics.dart) and equipSprite() for
-// background only -- sprite_cosmetics.dart's head/helmet/outfit/accessory
-// entries were retired along with the catalog data itself, but the
-// CosmeticSlot enum there still declares those cases (Dart requires an
-// exhaustive switch), so equipSprite keeps them as harmless no-ops rather
-// than deleting the enum values and chasing every switch that touches them.
+// Two equip paths: equipPixel() for the live figure catalog (head/hat/
+// torso/legs/item, data/pixel_cosmetics.dart) and equipBackground() for
+// background only (data/background_cosmetics.dart, renamed 2026-08-12 from
+// sprite_cosmetics.dart -- was equipSprite() before the same rename).
 //
-// Achievement/bundle/hidden-theme rewards still reference old sprite ids
-// (e.g. 'accessory_02') that resolve to nothing in either catalog now --
-// known, not yet remapped to the new 20-item pixel catalog. Nothing here
-// crashes on an unresolvable id (every UI that reads a reward already
-// null-checks), it just silently grants no visible cosmetic until that
-// remap happens.
+// Every achievement/bundle/hidden-theme reward id was re-pointed at real
+// catalog entries (pixel_cosmetics.dart grew to ~103 items with real
+// rarity data) at some point outside any session Claude was present for --
+// checked exhaustively 2026-08-12, all resolve. No remaining dead reward
+// ids as of that check.
 
 import 'package:flutter/material.dart';
 import '../../../providers/collection.dart';
 import '../data/achievements.dart';
 import '../data/pixel_cosmetics.dart';
-import '../data/sprite_cosmetics.dart' as sprite;
+import '../data/background_cosmetics.dart' as bg;
 import '../models/avatar_state.dart';
 import 'avatar_storage.dart';
 
@@ -169,12 +165,12 @@ class AchievementService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Background only now -- head/helmet/outfit/accessory are retired
-  // no-ops, kept solely so this switch stays exhaustive over
-  // sprite.CosmeticSlot without deleting the enum itself.
-  Future<void> equipSprite(sprite.SpriteCosmetic cosmetic) async {
+  // Background only -- bg.CosmeticSlot has just the one value now
+  // (background), so the slot check below is really just a defensive
+  // guard rather than filtering out other real cases.
+  Future<void> equipBackground(bg.BackgroundCosmetic cosmetic) async {
     if (!_state.unlockedIds.contains(cosmetic.id)) return;
-    if (cosmetic.slot != sprite.CosmeticSlot.background) return;
+    if (cosmetic.slot != bg.CosmeticSlot.background) return;
 
     _state = _state.copyWith(backgroundId: cosmetic.id);
     await AvatarStorage.instance.save(_state);

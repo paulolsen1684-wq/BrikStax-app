@@ -12,9 +12,9 @@
 //
 // rewardCosmetic points at the pixel catalog (data/pixel_cosmetics.dart) for
 // every tier except ht_metropolis's gold, which stayed a background
-// (bg_skyline, still a valid sprite-catalog id). Remapped from the old
-// retired sprite figure catalog (accessory_02/helmet_09/outfit_16 etc., all
-// dead post pixel-art cutover). Only 13 rare and 6 epic pixel items exist,
+// (bg_skyline, still a valid background_cosmetics.dart id). Remapped from
+// the old retired figure catalog (accessory_02/helmet_09/outfit_16 etc.,
+// all dead post pixel-art cutover). Only 13 rare and 6 epic pixel items exist,
 // so gold/diamond tiers across this file's 10 themes necessarily repeat a
 // handful of ids -- unlockOrDupePayout converts an already-owned repeat to
 // Briks instead of granting nothing, same as any other dupe.

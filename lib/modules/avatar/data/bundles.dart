@@ -1,8 +1,8 @@
 // lib/modules/avatar/data/bundles.dart
 //
 // cosmeticIds point at the pixel catalog now (data/pixel_cosmetics.dart) for
-// figure pieces, or the sprite catalog for the background piece (bg_*,
-// unchanged). Remapped from the old retired sprite figure catalog
+// figure pieces, or the background catalog for the background piece (bg_*,
+// unchanged). Remapped from the old retired figure catalog
 // (helmet_14/outfit_09/accessory_09 etc., all dead post pixel-art cutover).
 // px_torso_icetroopersuit/px_legs_icetrooper are the same "gold set"
 // referenced by achievements.dart -- keep in sync if reassigned. Several

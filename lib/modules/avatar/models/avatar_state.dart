@@ -1,12 +1,12 @@
 // lib/modules/avatar/models/avatar_state.dart
 //
 // Figure fields (headId/hatId/torsoId/legsId/itemId) point at the pixel-art
-// catalog (data/pixel_cosmetics.dart) now -- the old sprite-crop figure
-// system (helmetId/outfitId/accessoryId against sprite_cosmetics.dart) is
-// retired. backgroundId is untouched: none of the pixel-art batch is
-// background art, so Den backgrounds stay exactly where they were
-// (backgrounds_art.dart's procedural palettes, catalog entries still in
-// sprite_cosmetics.dart).
+// catalog (data/pixel_cosmetics.dart) now -- the old detailed-crop figure
+// system (helmetId/outfitId/accessoryId against the pre-rename
+// sprite_cosmetics.dart) is retired. backgroundId is untouched: none of the
+// pixel-art batch is background art, so Den backgrounds stay exactly where
+// they were (backgrounds_art.dart's procedural palettes, catalog entries in
+// background_cosmetics.dart, renamed 2026-08-12 from sprite_cosmetics.dart).
 //
 // The old field names (helmetId/outfitId/accessoryId) are gone from
 // toJson/fromJson on purpose -- an existing save's JSON simply won't have
