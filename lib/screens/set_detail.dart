@@ -1220,7 +1220,11 @@ class _DetailsTabState extends State<_DetailsTab> {
       final lang = _instructionLanguage(extras.instructions[i].description, i);
       grouped.putIfAbsent(lang, () => []).add(extras.instructions[i]);
     }
+    // English first when present -- grouped.keys otherwise preserves
+    // whatever arbitrary order BrickSet's API returned the entries in,
+    // which also silently decided the default `selected` language below.
     final languages = grouped.keys.toList();
+    if (languages.remove('English')) languages.insert(0, 'English');
     final selected = (_selectedLanguage != null && grouped.containsKey(_selectedLanguage))
         ? _selectedLanguage!
         : languages.first;
