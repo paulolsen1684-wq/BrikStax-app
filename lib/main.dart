@@ -181,7 +181,7 @@ class _ShellState extends State<_Shell> {
 
   // Body screens (scanner is excluded — it opens as a modal).
   // Wishlist and Community are appended only when their flags are on.
-  // Index map: 0 Home · 1 Sets · 2 Settings · 3 Wishlist · 4 Community
+  // Index map: 0 Home · 1 Sets · 2 Tools (Settings screen) · 3 Wishlist · 4 Community
   List<Widget> get _bodyScreens => [
     const DashboardScreen(),
     const InventoryScreen(),
@@ -278,7 +278,7 @@ class _BottomNav extends StatelessWidget {
             _btn(context, Icons.favorite_border, Icons.favorite, 'Wishlist',
                 active: current == 3, onTap: () => onTab(3)),
 
-          _btn(context, Icons.settings_outlined, Icons.settings, 'Settings',
+          _btn(context, Icons.settings_outlined, Icons.settings, 'Tools',
               active: current == 2, onTap: () => onTab(2)),
         ]),
       ),

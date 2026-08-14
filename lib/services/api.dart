@@ -5,6 +5,7 @@ import 'constants.dart';
 import 'storage.dart';
 import '../models/brickset_extras.dart';
 import '../models/checker_part.dart';
+import '../models/merge_part.dart';
 
 class Api {
   Api._();
@@ -116,6 +117,52 @@ class Api {
           .map((e) => CheckerPart.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
+  }
+
+  /// Merges up to 20 official LEGO sets' piece lists into one combined list
+  /// via the Worker's POST /parts-merge (see handlePartsMerge in
+  /// cloudflare-worker/worker.js / PARTS_MERGE_WORKER.js) -- same endpoint
+  /// cloudflare-site/parts-merger.html uses, MOC upload not supported here
+  /// (see merge_part.dart's file doc comment for why). Unlike _get's blanket
+  /// null-on-failure, a failed merge can still carry real per-set reasons
+  /// (e.g. one typo'd set number among five valid ones) worth showing the
+  /// user, so failures come back as a `MergeResult` with `error` set, not
+  /// null -- callers should check `.success` rather than null-check this.
+  Future<MergeResult> mergeParts(List<String> setNums) async {
+    try {
+      final r = await _client
+          .post(
+            Uri.parse('${K.workerUrl}parts-merge'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'ids': setNums}),
+          )
+          .timeout(const Duration(seconds: 40));
+      final data = jsonDecode(r.body) as Map<String, dynamic>?;
+      if (data == null) {
+        return MergeResult.failure('Server error (${r.statusCode})');
+      }
+      final warnings = (data['warnings'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [];
+      if (data['success'] != true) {
+        return MergeResult.failure(
+          warnings.isNotEmpty
+              ? warnings.join(' ')
+              : (data['error'] as String? ?? 'Server error (${r.statusCode})'),
+          warnings: warnings,
+        );
+      }
+      final parts = parseMergeCsv(data['csv'] as String? ?? '');
+      return MergeResult.success(
+        parts: parts,
+        setCount: data['setCount'] as int? ?? 0,
+        warnings: warnings,
+      );
+    } catch (_) {
+      return MergeResult.failure(
+          'Network error -- check your connection and try again.');
+    }
   }
 
   /// Resolve theme_id → full name (e.g. 246 → "Star Wars > UCS")

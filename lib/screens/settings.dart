@@ -16,6 +16,7 @@ import '../modules/avatar/widgets/pixel_item_tuner_screen.dart';
 import '../modules/avatar/widgets/den_layout_tuner_screen.dart';
 import 'push_test_screen.dart';
 import 'deal_history_screen.dart';
+import 'parts_merger_screen.dart';
 import '../services/push_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/device_identity.dart';
@@ -78,6 +79,17 @@ class _State extends State<SettingsScreen> {
             sub: 'Choose your colour palette · unlock new themes',
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const ThemePickerScreen())),
+          ),
+
+          // ── Tools ────────────────────────────────────────────────────────
+          _header(bt, 'Tools'),
+          _tile(bt,
+            icon: Icons.merge_type, bg: const Color(0xFFE6E9FF),
+            iconColor: BT.blue,
+            title: 'Parts Merger',
+            sub: 'Combine piece lists from up to 20 sets into one BrickLink export',
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const PartsMergerScreen())),
           ),
 
           // ── Deals ────────────────────────────────────────────────────────
