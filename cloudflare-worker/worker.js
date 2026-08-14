@@ -3807,11 +3807,20 @@ function parseRssItems(xml) {
     const guid = get("guid");
     const pubDateRaw = get("pubDate");
     let description = get("description");
+    const contentEncoded = get("content:encoded");
     if (!title || !link) continue;
+    // Slickdeals' <description> is always plain CDATA text with no <img> at
+    // all -- the actual thumbnail only ever appears inside <content:encoded>.
+    // Try description first (feeds that do put an inline <img> there keep
+    // working exactly as before), then fall back to content:encoded so
+    // Slickdeals items stop posting to Discord with no picture.
+    const imgSource = description && /src=['"][^'"]+['"]/.test(description) ? description : contentEncoded;
     let image = null;
-    if (description) {
-      const imgMatch = description.match(/src=['"]([^'"]+)['"]/);
+    if (imgSource) {
+      const imgMatch = imgSource.match(/src=['"]([^'"]+)['"]/);
       if (imgMatch) image = imgMatch[1];
+    }
+    if (description) {
       description = description.replace(/<img[^>]*>/gi, "").replace(/<[^>]+>/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/\s+/g, " ").trim();
       if (description.length > 280) description = description.slice(0, 277) + "...";
     }
