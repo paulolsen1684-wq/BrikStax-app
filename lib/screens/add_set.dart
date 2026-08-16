@@ -84,9 +84,18 @@ class _State extends State<AddSetScreen> {
 
   void _applyRb(Map<String, dynamic> d) {
     _rb = d;
+    final setNum = d['set_num'] as String?;
+    // Only when the Set number field is still blank -- covers a future
+    // AddSetScreen(prefill: ...) call site that doesn't also pass
+    // initialNum (today's only call site, set_lookup_screen.dart, always
+    // passes both together, so _cNum is already populated by the time
+    // this runs from initState -- this guard never fires there). Never
+    // overwrites what the user actually typed when this runs from the
+    // live _onNumChange -> _lookup path instead.
+    if (setNum != null && _cNum.text.trim().isEmpty) _cNum.text = setNum;
     _cName.text = d['name'] as String? ?? '';
     _cRet.text  = '';
-    _fetchRetail(d['set_num'] as String? ?? _cNum.text.trim());
+    _fetchRetail(setNum ?? _cNum.text.trim());
   }
 
   Future<void> _fetchRetail(String num) async {

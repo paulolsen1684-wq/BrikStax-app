@@ -493,21 +493,23 @@ Color _themeBoxColor(String? theme) {
   return const Color(0xFFE65100);
 }
 
-// ── Den palette (ported) ──────────────────────────────────────────────────────
-(Color, Color, Color) _denPalette(String? bgId) => switch (bgId) {
-  'bg_twinsuns'  => (const Color(0xFF2B1B10), const Color(0xFF201209), const Color(0xFFFFB300)),
-  'bg_stardust'  => (const Color(0xFF161035), const Color(0xFF100B26), const Color(0xFFFFD54F)),
-  'bg_neoncity'  => (const Color(0xFF0D0D1A), const Color(0xFF080812), const Color(0xFF00E5FF)),
-  'bg_tallgrass' => (const Color(0xFF173B1E), const Color(0xFF102B15), const Color(0xFFFFEB3B)),
-  'bg_skyline'   => (const Color(0xFF102A43), const Color(0xFF0B1E30), const Color(0xFFFFD740)),
-  'bg_dojo'      => (const Color(0xFF241313), const Color(0xFF190D0D), const Color(0xFFE53935)),
-  'bg_volcano'   => (const Color(0xFF1C1A16), const Color(0xFF13110E), const Color(0xFFFF5722)),
-  'bg_space'     => (const Color(0xFF0d1b0d), const Color(0xFF081308), const Color(0xFF88FF44)),
-  'bg_yellow'    => (const Color(0xFF1a1200), const Color(0xFF110C00), const Color(0xFFFFD700)),
-  'bg_shelf'     => (const Color(0xFF1a0f00), const Color(0xFF110A00), const Color(0xFFC9A13B)),
-  'bg_podium'    => (const Color(0xFF0a0a1a), const Color(0xFF060612), const Color(0xFFFFD700)),
-  _              => (const Color(0xFF1a1a2e), const Color(0xFF12121f), const Color(0xFFFFCB00)),
-};
+// ── Den palette ──────────────────────────────────────────────────────────────
+// Reads bgArt.bgPalettes directly now, matching den_scene.dart's own
+// implementation exactly, instead of a hand-ported hardcoded switch. That
+// switch had drifted onto ids from an earlier, retired background catalog
+// (bg_twinsuns/bg_stardust/bg_neoncity/bg_tallgrass/bg_dojo/bg_space/
+// bg_yellow/bg_shelf/bg_podium -- none of which exist in the current
+// 52-entry catalog), so every real current id except bg_skyline/bg_volcano
+// fell through to one generic fallback color. Invisible for 48 of 52
+// backgrounds (hasImage skips painting these colors entirely once real
+// photo art exists), but for the 4 procedural-only ids that still need
+// this -- bg_workbench/bg_snowfield/bg_maproom/bg_shadowrealm -- it meant
+// the shared Den image rendered the wrong wall/floor colors compared to
+// what's actually shown live in the Den, which already read the real map.
+(Color, Color, Color) _denPalette(String? bgId) {
+  final p = bgArt.bgPalettes[bgId] ?? bgArt.bgPalettes['bg_cream']!;
+  return (p.denWall, p.denFloor, p.accent);
+}
 
 // ── Public den painter (self-contained port of _DenPainter) ───────────────────
 class DenPainter extends CustomPainter {

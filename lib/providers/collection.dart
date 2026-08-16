@@ -382,6 +382,19 @@ class CollectionProvider extends ChangeNotifier {
           .replaceAll(RegExp(r'-\d+$'), '');
       if (num.isEmpty) continue;
       if (_sets.any((s) => s.num == num)) continue;
+
+      // Resolve theme_id -> full "Parent > Child" name the same way every
+      // other set-lookup path does (Api.fetchSet, AddSetScreen, fillImages)
+      // -- without this, every bulk-imported set permanently had
+      // theme: null. fillImages' own theme backfill only runs for sets
+      // missing an image, and these already have one from the collection
+      // endpoint, so nothing else in the app ever fixed it after the fact:
+      // zero theme-based achievements/bundles/hidden-themes and no theme
+      // badge/dashboard grouping for anything imported this way. Real gap,
+      // not cosmetic -- fixed 2026-08-15.
+      final themeId = item['theme_id'] as int?;
+      final themeName = themeId != null ? await _api.resolveTheme(themeId) : null;
+
       final set = LegoSet(
         id:       _uuid.v4(),
         num:      num,
@@ -389,6 +402,7 @@ class CollectionProvider extends ChangeNotifier {
         pieces:   item['num_parts'] as int?,
         year:     item['year'] as int?,
         imageUrl: item['set_img_url'] as String?,
+        theme:    themeName,
         qty:      item['_qty'] as int? ?? 1,
         addedAt:  DateTime.now(),
       );

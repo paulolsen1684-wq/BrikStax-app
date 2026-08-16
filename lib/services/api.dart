@@ -91,7 +91,7 @@ class Api {
     // Resolve theme name
     final themeId = d['theme_id'] as int?;
     if (themeId != null) {
-      final name = await _resolveTheme(themeId);
+      final name = await resolveTheme(themeId);
       if (name != null) d['theme_name'] = name;
     }
     return d;
@@ -165,8 +165,12 @@ class Api {
     }
   }
 
-  /// Resolve theme_id → full name (e.g. 246 → "Star Wars > UCS")
-  Future<String?> _resolveTheme(int themeId) async {
+  /// Resolve theme_id → full name (e.g. 246 → "Star Wars > UCS"). Public
+  /// (not just fetchSet's own internal helper) so importFromRebrickable can
+  /// resolve theme_id -> name for bulk-imported sets too -- see
+  /// CollectionProvider.importFromRebrickable's own comment for why that
+  /// matters.
+  Future<String?> resolveTheme(int themeId) async {
     // Check DB cache first
     final cached = await Storage.instance.getCachedTheme(themeId);
     if (cached != null) return cached;
@@ -183,7 +187,7 @@ class Api {
 
     // Recurse to get parent (e.g. "Star Wars" for subtheme "UCS")
     if (parentId != null && parentId != themeId) {
-      final parentName = await _resolveTheme(parentId);
+      final parentName = await resolveTheme(parentId);
       if (parentName != null && parentName != name) {
         name = '$parentName > $name';
       }

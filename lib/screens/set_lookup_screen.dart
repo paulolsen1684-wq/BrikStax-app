@@ -98,26 +98,33 @@ class _State extends State<SetLookupScreen> {
       if (mounted && _lookedUpNum == num) setState(() => _bs = bs);
     });
 
-    _fetchEbay(cleanNum, rb['name'] as String? ?? '');
+    _fetchEbay(cleanNum, rb['name'] as String? ?? '', num);
   }
 
-  Future<void> _fetchEbay(String setNum, String name) async {
+  // `forNum` is the lookup this fetch was started for -- compared against
+  // _lookedUpNum before either setState below applies. Looking up set A,
+  // then quickly looking up set B before A's (slower, two-sequential-call)
+  // eBay fetch finishes, used to let A's stale prices land on top of B's
+  // display once A finally resolved: the old guard only checked
+  // `_lookedUpNum.isEmpty`, which is false the instant ANY lookup has ever
+  // completed, not just this one.
+  Future<void> _fetchEbay(String setNum, String name, String forNum) async {
     setState(() => _ebayLoading = true);
     try {
       final sealed = await Api.instance.fetchEbay(setNum, name, sealed: true);
-      if (!mounted || _lookedUpNum.isEmpty) return;
+      if (!mounted || _lookedUpNum != forNum) return;
       if (sealed?['source'] != 'cache') {
         await Future.delayed(const Duration(milliseconds: 1200));
       }
       final open = await Api.instance.fetchEbay(setNum, name, sealed: false);
-      if (!mounted) return;
+      if (!mounted || _lookedUpNum != forNum) return;
       setState(() {
         _ebaySealed = (sealed?['avg'] as num?)?.toDouble();
         _ebayOpen   = (open?['avg']   as num?)?.toDouble();
         _ebayLoading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _ebayLoading = false);
+      if (mounted && _lookedUpNum == forNum) setState(() => _ebayLoading = false);
     }
   }
 
