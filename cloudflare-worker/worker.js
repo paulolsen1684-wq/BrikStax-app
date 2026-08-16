@@ -2778,17 +2778,47 @@ async function handleProxy(url) {
   }
 }
 __name(handleProxy, "handleProxy");
+// The `ebay_usage` table was referenced by handleEbay/handleEbayUsage from
+// the start but never actually created by any migration -- every read and
+// write against it was silently failing inside its own try/catch this
+// whole time (SQLITE_ERROR: no such table), which is why the "eBay API
+// usage" tile in Settings sat frozen at 0 forever regardless of how many
+// real calls were made, and why the monthly cap could never actually kick
+// in. Self-healing CREATE TABLE IF NOT EXISTS, same lazy-migration shape
+// as ensureGuidHashColumns below -- called from both handlers since either
+// could be the first request to touch it.
+async function ensureEbayUsageTable(env) {
+  try {
+    await env.PRICE_CACHE.prepare(
+      "CREATE TABLE IF NOT EXISTS ebay_usage (month_key TEXT PRIMARY KEY, call_count INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)"
+    ).run();
+  } catch (e) {
+    console.error("ensureEbayUsageTable failed:", e.message);
+  }
+}
+__name(ensureEbayUsageTable, "ensureEbayUsageTable");
 async function handleEbay(request, env) {
+  if (env.PRICE_CACHE) await ensureEbayUsageTable(env);
   let body;
   try {
     body = await request.json();
   } catch {
     return err("Invalid JSON body");
   }
-  const { num, condition, name } = body;
+  const { num, condition, name, force } = body;
   if (!num || !condition) return err("Missing num or condition");
   const cacheKey = `${num}:${condition}`;
-  if (env.PRICE_CACHE) {
+  // `force` (currently only ever sent by dev-mode "Force refresh all")
+  // skips the shared D1 cache read entirely so the caller always gets a
+  // live RapidAPI call -- and therefore a real ebay_usage increment below.
+  // Without this, "force" only ever meant "ignore the *client's own*
+  // staleness check" -- the Worker still silently served its 7-day shared
+  // cache underneath regardless, which is why the eBay API usage counter
+  // in Settings could sit frozen indefinitely even while repeatedly
+  // tapping refresh: almost every call was a cache hit, never reaching the
+  // increment. The monthly cap check right below still applies either way
+  // -- this only bypasses the cache, not the budget guard.
+  if (env.PRICE_CACHE && !force) {
     try {
       const row = await env.PRICE_CACHE.prepare("SELECT * FROM price_cache WHERE cache_key = ?").bind(cacheKey).first();
       if (row) {
@@ -2865,6 +2895,7 @@ async function handleEbayUsage(env) {
   const EBAY_MONTHLY_CAP = 1350;
   let calls = 0;
   if (env.PRICE_CACHE) {
+    await ensureEbayUsageTable(env);
     try {
       const row = await env.PRICE_CACHE.prepare(
         "SELECT call_count FROM ebay_usage WHERE month_key = ?"

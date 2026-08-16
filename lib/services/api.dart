@@ -413,6 +413,15 @@ class Api {
     String num,
     String name, {
     required bool sealed,
+    // Skips the Worker's shared 7-day D1 cache, guaranteeing a live
+    // RapidAPI call (see handleEbay in cloudflare-worker/worker.js for why
+    // this exists -- the cache silently ate almost every call otherwise,
+    // even ones from the client's own "force" refresh). Not exposed on the
+    // public refresh path -- see CollectionProvider.refreshEbay, which
+    // only sets this true for dev-mode "Force refresh all" specifically,
+    // to avoid a regular user's tap suddenly costing real RapidAPI calls
+    // that used to be free cache hits shared across everyone.
+    bool force = false,
   }) async {
     final condition = sealed ? 'sealed' : 'open';
     final endpoint  = Uri.parse('${K.workerUrl}ebay');
@@ -425,6 +434,7 @@ class Api {
           'num':       num,
           'condition': condition,
           'name':      name,
+          if (force) 'force': true,
         }),
       ).timeout(const Duration(seconds: 20));
 

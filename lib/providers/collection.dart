@@ -253,6 +253,13 @@ class CollectionProvider extends ChangeNotifier {
         ? _sets
         : _sets.where((s) => s.ebayIsStale).toList();
 
+    // Bypass the Worker's shared D1 cache only for dev-mode "Force refresh
+    // all" -- see Api.fetchEbay's doc comment. A regular user's "Force
+    // refresh all" still only ignores *local* staleness, exactly as
+    // before; it doesn't start spending extra RapidAPI calls that used to
+    // be free cache hits.
+    final forceLive = forceAll && DevMode.instance.isOn;
+
     int ok = 0, fail403 = 0;
 
     for (int i = 0; i < targets.length; i++) {
@@ -264,7 +271,7 @@ class CollectionProvider extends ChangeNotifier {
       Map<String, dynamic>? openData;
 
       try {
-        sealedData = await _api.fetchEbay(s.num, s.name, sealed: true);
+        sealedData = await _api.fetchEbay(s.num, s.name, sealed: true, force: forceLive);
         // If data came from cache, no need for delay before open fetch
         final fromCache = sealedData?['source'] == 'cache';
         if (!fromCache) await Future.delayed(const Duration(milliseconds: 1200));
@@ -282,7 +289,7 @@ class CollectionProvider extends ChangeNotifier {
       }
 
       try {
-        openData = await _api.fetchEbay(s.num, s.name, sealed: false);
+        openData = await _api.fetchEbay(s.num, s.name, sealed: false, force: forceLive);
       } on ApiException catch (_) {}
 
       if (sealedData != null || openData != null) {
