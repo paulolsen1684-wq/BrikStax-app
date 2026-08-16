@@ -1639,21 +1639,23 @@ var stringToBytes = qrcode.stringToBytes;
 var EBAY_CACHE_TTL_DAYS = 7;
 var BARCODE_CACHE_TTL_DAYS = 90;
 var DAILY_SEED_LIMIT = 40;
-// Brickset's getSets method (confirmed via their own docs, brickset.com
-// /article/52666) is capped at 100 calls/day on the default key tier --
-// BRICKSET_KEY here is still on that default as of 2026-08-16, not a
-// higher production cap. That quota is shared with every OTHER getSets
-// caller in the app, which the Worker can't see or count at all: the
-// Flutter app calls Brickset directly for retail lookups
-// (Api.fetchSetDetails), Set Detail ratings/instructions/images
-// (Api.fetchSetExtras), and barcode EAN lookups (Api.fetchSetByBarcode) --
-// none of those go through this Worker. BRICKSET_SEED_DAILY_BUDGET
-// reserves ~30 calls/day of headroom for that invisible traffic and caps
-// seeding (the only getSets consumer this Worker actually controls) at 70.
+// Brickset's own docs (brickset.com/article/52666) describe a 100
+// getSets-calls/day default tier -- but 2026-08-16 live testing against
+// this app's REAL key (env.BRICKSET_KEY, confirmed via `wrangler secret
+// list` to actually be set, not just the code's hardcoded fallback) put
+// 110 calls through in one day with zero errors, so that generic-docs
+// number doesn't describe this key's actual ceiling (higher tier, or no
+// hard synchronous enforcement -- can't tell which from here). Rather
+// than guess another number, this is now a generous ceiling that
+// shouldn't practically bind under normal operation -- the real safety
+// net is watching seed_errors (already auto-logged on any non-200
+// Brickset response) for the first actual sign of throttling, not this
+// constant. If seed_errors ever shows a real rate-limit-shaped failure,
+// come back and lower this based on that real evidence.
 // Tracked via brickset_usage below, real API CALLS -- not the same number
 // as barcode_cache row growth, since one successful call can insert up to
 // 2 rows (a set's UPC and EAN barcodes are separate INSERTs).
-var BRICKSET_SEED_DAILY_BUDGET = 70;
+var BRICKSET_SEED_DAILY_BUDGET = 500;
 var EBAY_HOST = "ebay-average-selling-price.p.rapidapi.com";
 var BRICKSET_KEY_FALLBACK = "3-Dwg8-SY9s-4VdM8";
 var RB_DISCOVERY_PAGE_SIZE = 50;
@@ -2562,7 +2564,7 @@ async function handleBricksetUsage(env) {
     seed_calls_today: used,
     seed_budget: BRICKSET_SEED_DAILY_BUDGET,
     seed_budget_remaining: Math.max(0, BRICKSET_SEED_DAILY_BUDGET - used),
-    note: "Only counts this Worker's own seeding calls -- the app's direct retail/extras/barcode lookups aren't visible here, which is why the seed budget stops well short of Brickset's real 100/day cap."
+    note: "Only counts this Worker's own seeding calls -- the app's direct retail/extras/barcode lookups aren't visible here. Budget is intentionally generous (real 2026-08-16 testing put 110 calls/day through with zero errors) -- watch seed_errors for the real signal if this key ever actually throttles."
   });
 }
 __name(handleBricksetUsage, "handleBricksetUsage");

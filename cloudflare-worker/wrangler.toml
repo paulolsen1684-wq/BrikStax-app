@@ -25,10 +25,27 @@ compatibility_date = "2026-07-01"
 workers_dev = true
 
 [triggers]
-# Matches the 4 schedules seen on the live worker. Which one is which
-# (news/seed/cleanup vs. DEAL_CRON etc.) is determined by worker.js's own
-# scheduled() handler branching on event.cron -- not by anything here.
-crons = ["0 15 * * *", "0 3 * * *", "0 4 * * *", "0 */6 * * *"]
+# Consolidated 2026-08-16 from the original 4 crons to 2. The original
+# ["0 15 * * *", "0 3 * * *", "0 4 * * *", "0 */6 * * *"] had 3 separate
+# daily entries (3am/4am/3pm) that all did the exact same thing anyway --
+# worker.js's scheduled() handler only ever special-cases DEAL_CRON, so
+# every non-deal trigger runs runSeedBatch + cleanupExpiredCommunityPosts +
+# checkRssForNewsCandidates together regardless of which of the 3 times
+# fired it (a known, still-open gap -- see worker.js's scheduled() for
+# the full explanation). Since they were never actually differentiated,
+# collapsing them into one hourly trigger loses nothing and runs seeding
+# far more often (was ~3x/day accidentally, now 24x/day on purpose) --
+# real safety net for how much that actually seeds per day is
+# BRICKSET_SEED_DAILY_BUDGET in worker.js, not this schedule.
+#
+# This consolidation was forced by hitting a real Cloudflare account-wide
+# limit while trying to just ADD a 5th cron on top of the original 4:
+# Workers Free allows only 5 cron triggers total across the WHOLE
+# account, not per-worker -- and this account was already at that ceiling
+# (these 4 + at least one on the separate lego-rewards-watcher Worker, see
+# CLAUDE.md). Net result nets -2 slots vs. the original 4, with real
+# headroom to spare, instead of requiring a Workers Paid upgrade.
+crons = ["0 * * * *", "0 */6 * * *"]
 
 [[d1_databases]]
 binding = "PRICE_CACHE"
