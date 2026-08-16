@@ -9,6 +9,27 @@ class WidgetService {
   WidgetService._();
   static final instance = WidgetService._();
 
+  // The Android package the widget provider classes actually live in --
+  // NOT the same as this app's applicationId (com.brixstax.android, see
+  // android/app/build.gradle.kts). This is the Kotlin `namespace` the
+  // *.kt files themselves declare (`package com.brikstax.brikstax`, see
+  // android/app/src/main/kotlin/com/brikstax/brikstax/*WidgetProvider.kt),
+  // a legitimately different, older identifier than the app's real
+  // Play Store package -- both are valid to differ under modern AGP.
+  //
+  // Real bug fixed 2026-08-16: every HomeWidget.updateWidget() call below
+  // used to pass only `name`/`androidName` (short class names). The
+  // plugin's native side (HomeWidgetPlugin.kt) resolves those via
+  // `Class.forName(qualifiedAndroidName ?: "${context.packageName}.$name")`
+  // -- and `context.packageName` at runtime is the applicationId, not this
+  // namespace. That combination built a class name
+  // ("com.brixstax.android.BrikStaxWidgetProvider") that has never
+  // existed, so every single widget update silently threw
+  // ClassNotFoundException, caught by this file's own broad try/catch --
+  // no crash, no log, just a widget that never refreshes. Passing
+  // `qualifiedAndroidName` explicitly bypasses that broken fallback
+  // entirely and uses the real class name as-is.
+  static const String _pkg = 'com.brikstax.brikstax';
   static const String _androidWidgetName = 'BrikStaxWidgetProvider';
 
   /// Push fresh stats to the widget and ask Android to redraw it.
@@ -26,6 +47,7 @@ class WidgetService {
       await HomeWidget.updateWidget(
         name: _androidWidgetName,
         androidName: _androidWidgetName,
+        qualifiedAndroidName: '$_pkg.$_androidWidgetName',
       );
     } catch (_) {
       // Widget update failing (e.g. no widget currently placed on the home
@@ -95,6 +117,7 @@ class WidgetService {
       await HomeWidget.updateWidget(
         name: 'RandomSetWidgetProvider',
         androidName: 'RandomSetWidgetProvider',
+        qualifiedAndroidName: '$_pkg.RandomSetWidgetProvider',
       );
     } catch (_) {
       // Widget update failing should never crash the app.
@@ -108,6 +131,7 @@ class WidgetService {
       await HomeWidget.updateWidget(
         name: 'AvatarDenWidgetProvider',
         androidName: 'AvatarDenWidgetProvider',
+        qualifiedAndroidName: '$_pkg.AvatarDenWidgetProvider',
       );
     } catch (_) {
       // Widget update failing should never crash the app.
