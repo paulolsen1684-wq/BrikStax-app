@@ -1728,6 +1728,7 @@ var worker_default = {
     if (path === "/ebay" && request.method === "GET") return checkEbayCache(url, env);
     if (path === "/ebay/usage" && request.method === "GET") return handleEbayUsage(env);
     if (path === "/brickset/usage" && request.method === "GET") return handleBricksetUsage(env);
+    if (path === "/admin/activity" && request.method === "GET") return handleAdminActivity(env);
     if (path === "/barcode/cache" && request.method === "POST") return handleBarcodeCache(request, env);
     if (path === "/barcode" && request.method === "GET") return handleBarcode(url, env);
     if (path === "/barcode/submit" && request.method === "POST") return handleBarcodeSubmit(request, env);
@@ -2568,6 +2569,89 @@ async function handleBricksetUsage(env) {
   });
 }
 __name(handleBricksetUsage, "handleBricksetUsage");
+// Aggregated read-only activity snapshot for the ops dashboard artifact --
+// no auth (same tier as /seed/status, /brickset/usage, /ebay/usage): only
+// ever returns non-sensitive counts/public content already exposed
+// elsewhere (deal/news titles are public via /deals, /news already;
+// community numbers are counts only, never captions or user_ids).
+async function handleAdminActivity(env) {
+  if (!env.PRICE_CACHE) return err("No D1 binding");
+  const out = { generated_at: Date.now() };
+  try {
+    const seedStatus = await env.PRICE_CACHE.prepare(
+      "SELECT rb_page, rb_done, last_run FROM seed_progress WHERE id = 1"
+    ).first();
+    const barcodeCount = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM barcode_cache").first();
+    const queueCount = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM seed_queue").first();
+    const dailyGrowth = await env.PRICE_CACHE.prepare(`
+      SELECT date(cached_at/1000, 'unixepoch') as day, COUNT(*) as cnt
+      FROM barcode_cache GROUP BY day ORDER BY day DESC LIMIT 14
+    `).all();
+    out.barcodes = {
+      total_cached: barcodeCount?.cnt ?? 0,
+      queue_size: queueCount?.cnt ?? 0,
+      rebrickable_page: seedStatus?.rb_page ?? null,
+      rebrickable_exhausted: seedStatus?.rb_done === 1,
+      last_run: seedStatus?.last_run ?? null,
+      daily_growth: (dailyGrowth.results || []).reverse()
+    };
+  } catch (e) {
+    out.barcodes = { error: e.message };
+  }
+  out.brickset_usage = {
+    day: todayKey(),
+    seed_calls_today: await getBricksetUsageToday(env),
+    seed_budget: BRICKSET_SEED_DAILY_BUDGET
+  };
+  try {
+    const monthKey = (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
+    const row = await env.PRICE_CACHE.prepare(
+      "SELECT call_count FROM ebay_usage WHERE month_key = ?"
+    ).bind(monthKey).first();
+    out.ebay_usage = { month: monthKey, calls: row?.call_count ?? 0, cap: 1350 };
+  } catch (e) {
+    out.ebay_usage = { error: e.message };
+  }
+  try {
+    const totalDeals = await env.PRICE_CACHE.prepare(
+      "SELECT COUNT(*) as cnt FROM deals WHERE expires_at IS NULL OR expires_at > ?"
+    ).bind(Date.now()).first();
+    const recentDeals = await env.PRICE_CACHE.prepare(`
+      SELECT title, retailer, deal_price, retail_price, created_at FROM deals
+      ORDER BY created_at DESC LIMIT 6
+    `).all();
+    out.deals = { total_live: totalDeals?.cnt ?? 0, recent: recentDeals.results || [] };
+  } catch (e) {
+    out.deals = { error: e.message };
+  }
+  try {
+    const totalNews = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM news").first();
+    const recentNews = await env.PRICE_CACHE.prepare(`
+      SELECT title, type, posted_at FROM news ORDER BY posted_at DESC LIMIT 6
+    `).all();
+    out.news = { total: totalNews?.cnt ?? 0, recent: recentNews.results || [] };
+  } catch (e) {
+    out.news = { error: e.message };
+  }
+  try {
+    const statusRows = await env.PRICE_CACHE.prepare(
+      "SELECT status, COUNT(*) as cnt FROM community_posts GROUP BY status"
+    ).all();
+    const byStatus = {};
+    for (const r of statusRows.results || []) byStatus[r.status] = r.cnt;
+    const likes = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM community_likes").first();
+    out.community = {
+      pending: byStatus.pending || 0,
+      approved: byStatus.approved || 0,
+      rejected: byStatus.rejected || 0,
+      total_likes: likes?.cnt ?? 0
+    };
+  } catch (e) {
+    out.community = { error: e.message };
+  }
+  return json(out);
+}
+__name(handleAdminActivity, "handleAdminActivity");
 async function runSeedBatch(env) {
   if (!env.PRICE_CACHE) return { ok: false, reason: "no_db" };
   await ensureMonthlyCatchupColumn(env);
