@@ -1729,6 +1729,7 @@ var worker_default = {
     if (path === "/ebay/usage" && request.method === "GET") return handleEbayUsage(env);
     if (path === "/brickset/usage" && request.method === "GET") return handleBricksetUsage(env);
     if (path === "/admin/activity" && request.method === "GET") return handleAdminActivity(env);
+    if (path === "/community/resend" && request.method === "POST") return handleCommunityResend(request, env);
     if (path === "/barcode/cache" && request.method === "POST") return handleBarcodeCache(request, env);
     if (path === "/barcode" && request.method === "GET") return handleBarcode(url, env);
     if (path === "/barcode/submit" && request.method === "POST") return handleBarcodeSubmit(request, env);
@@ -3269,6 +3270,37 @@ async function notifyModChannel(env, postId, imageKey, userId, caption, setNum) 
   return { status: res.status, body: bodyText };
 }
 __name(notifyModChannel, "notifyModChannel");
+// Re-sends the mod notification (fresh embed + working Approve/Reject
+// buttons) for a post that's still pending. Found necessary 2026-08-16:
+// notifyModChannel only ever fired once, at submit time -- a post that
+// scrolls out of easy reach in the mod channel (or whose original message
+// just gets missed) had no way back to a clickable state, so it just sat
+// pending forever with no error anywhere. Deliberately unauthenticated,
+// same tier as /seed/status etc. -- the pending-only guard below is the
+// real safety rail (can't be used to re-notify something already
+// resolved, and worst-case abuse is just an extra Discord message, not
+// data loss).
+async function handleCommunityResend(request, env) {
+  if (!env.PRICE_CACHE) return err("No D1 binding");
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return err("Invalid JSON");
+  }
+  const id = body.id;
+  if (!id) return err("Missing id");
+  const post = await env.PRICE_CACHE.prepare("SELECT * FROM community_posts WHERE id = ?").bind(id).first();
+  if (!post) return err("Post not found", 404);
+  if (post.status !== "pending") return err(`Post #${id} is already ${post.status} -- nothing to resend`, 409);
+  try {
+    const result = await notifyModChannel(env, post.id, post.image_key, post.user_id, post.caption, post.set_num);
+    return json({ ok: true, id: post.id, discord_status: result.status });
+  } catch (e) {
+    return err(`Resend failed: ${e.message}`, 502);
+  }
+}
+__name(handleCommunityResend, "handleCommunityResend");
 async function handleCommunityPhoto(url, env) {
   if (!env.COMMUNITY_PHOTOS) return err("No R2 binding");
   const key = decodeURIComponent(url.pathname.replace("/community/photo/", ""));
