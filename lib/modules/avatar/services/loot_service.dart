@@ -90,7 +90,35 @@ class LootService {
   int _briks = 0;
   final _rng = Random.secure();
 
-  DailyStreak get streak => _streak;
+  // `canClaim` is normally only ever recomputed against the current date
+  // by DailyStreak.fromJson, called exclusively from init() at cold app
+  // start. There's no AppLifecycleState observer anywhere in this app, so
+  // nothing rechecks it if the session stays alive across local midnight
+  // (backgrounded, not force-quit) -- every one of this getter's 4 call
+  // sites (daily_claim_screen, dashboard_avatar_card,
+  // DailyFiveService.isDone(checkin), claimDaily's own guard) would keep
+  // showing yesterday's "already claimed" state until a full restart.
+  // Self-corrects here instead, at the one shared read path, rather than
+  // needing every call site to remember an ensureToday()-style call first.
+  DailyStreak get streak {
+    if (!_streak.canClaim && _streak.lastClaim != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final lastDay = DateTime(
+          _streak.lastClaim!.year, _streak.lastClaim!.month, _streak.lastClaim!.day);
+      if (lastDay.isBefore(today)) {
+        _streak = DailyStreak(
+          streak:    _streak.streak,
+          longest:   _streak.longest,
+          lastClaim: _streak.lastClaim,
+          canClaim:  true,
+          nextTier:  _streak.nextTier,
+        );
+      }
+    }
+    return _streak;
+  }
+
   Set<String> get unlockedBundles => Set.unmodifiable(_unlockedBundles);
   int get briks => _briks;
 

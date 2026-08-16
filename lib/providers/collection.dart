@@ -406,7 +406,16 @@ class CollectionProvider extends ChangeNotifier {
     int imported = 0;
     for (final item in data) {
       try {
-        final s = LegoSet.fromJson(item as Map<String, dynamic>);
+        // Restore accepts arbitrary pasted JSON (Settings > Restore from
+        // backup), not guaranteed to already be this app's own clean
+        // exportJson() output -- normalize `num` the same way addSet/
+        // importFromRebrickable do (strip a trailing "-1" variant suffix)
+        // or a suffixed num silently fails the dedup check below and
+        // duplicates an existing set instead of updating it.
+        final map = Map<String, dynamic>.from(item as Map<String, dynamic>);
+        final rawNum = map['num'] as String? ?? '';
+        map['num'] = rawNum.replaceAll(RegExp(r'-\d+$'), '');
+        final s = LegoSet.fromJson(map);
         final idx = _sets.indexWhere((x) => x.num == s.num);
         if (idx >= 0) {
           _sets[idx] = s;

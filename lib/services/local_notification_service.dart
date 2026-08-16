@@ -175,12 +175,6 @@ class LocalNotificationService extends ChangeNotifier {
       return;
     }
 
-    // Records that a nudge was genuinely needed AND will actually show
-    // today -- DailyFiveService.claimBonus() reads this to decide whether
-    // finishing later earns the +10 Brik follow-through bonus on top of
-    // the normal reward.
-    await daily5.markReminderNeeded();
-
     final now = tz.TZDateTime.now(tz.local);
     final today = tz.TZDateTime(
         tz.local, now.year, now.month, now.day, minuteOfDay ~/ 60, minuteOfDay % 60);
@@ -188,9 +182,21 @@ class LocalNotificationService extends ChangeNotifier {
       // Already past today's rolled time -- don't fire one for a time
       // that's already gone. Tomorrow's app-open re-syncs fresh via
       // ensureToday()'s own day-rollover, no need to pre-schedule ahead.
+      // Deliberately checked BEFORE markReminderNeeded() below: this path
+      // means no notification will ever actually show today, so the +10
+      // follow-through bonus must not become claimable either -- it used
+      // to be marked needed unconditionally first, so a late app-open
+      // after the rolled window had already passed could grant the bonus
+      // for a nudge the user never actually saw.
       await _plugin.cancel(_dailyFiveReminderId);
       return;
     }
+
+    // Records that a nudge was genuinely needed AND will actually show
+    // today -- DailyFiveService.claimBonus() reads this to decide whether
+    // finishing later earns the +10 Brik follow-through bonus on top of
+    // the normal reward.
+    await daily5.markReminderNeeded();
 
     final remaining = 5 - daily5.completedCount;
     await _plugin.zonedSchedule(
