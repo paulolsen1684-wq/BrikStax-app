@@ -1639,6 +1639,21 @@ var stringToBytes = qrcode.stringToBytes;
 var EBAY_CACHE_TTL_DAYS = 7;
 var BARCODE_CACHE_TTL_DAYS = 90;
 var DAILY_SEED_LIMIT = 40;
+// Brickset's getSets method (confirmed via their own docs, brickset.com
+// /article/52666) is capped at 100 calls/day on the default key tier --
+// BRICKSET_KEY here is still on that default as of 2026-08-16, not a
+// higher production cap. That quota is shared with every OTHER getSets
+// caller in the app, which the Worker can't see or count at all: the
+// Flutter app calls Brickset directly for retail lookups
+// (Api.fetchSetDetails), Set Detail ratings/instructions/images
+// (Api.fetchSetExtras), and barcode EAN lookups (Api.fetchSetByBarcode) --
+// none of those go through this Worker. BRICKSET_SEED_DAILY_BUDGET
+// reserves ~30 calls/day of headroom for that invisible traffic and caps
+// seeding (the only getSets consumer this Worker actually controls) at 70.
+// Tracked via brickset_usage below, real API CALLS -- not the same number
+// as barcode_cache row growth, since one successful call can insert up to
+// 2 rows (a set's UPC and EAN barcodes are separate INSERTs).
+var BRICKSET_SEED_DAILY_BUDGET = 70;
 var EBAY_HOST = "ebay-average-selling-price.p.rapidapi.com";
 var BRICKSET_KEY_FALLBACK = "3-Dwg8-SY9s-4VdM8";
 var RB_DISCOVERY_PAGE_SIZE = 50;
@@ -1710,6 +1725,7 @@ var worker_default = {
     if (path === "/ebay" && request.method === "POST") return handleEbay(request, env);
     if (path === "/ebay" && request.method === "GET") return checkEbayCache(url, env);
     if (path === "/ebay/usage" && request.method === "GET") return handleEbayUsage(env);
+    if (path === "/brickset/usage" && request.method === "GET") return handleBricksetUsage(env);
     if (path === "/barcode/cache" && request.method === "POST") return handleBarcodeCache(request, env);
     if (path === "/barcode" && request.method === "GET") return handleBarcode(url, env);
     if (path === "/barcode/submit" && request.method === "POST") return handleBarcodeSubmit(request, env);
@@ -2492,6 +2508,64 @@ async function runMonthlyCatchup(env, limit) {
   return candidates;
 }
 __name(runMonthlyCatchup, "runMonthlyCatchup");
+// Real daily getSets call counter for seeding specifically -- day-keyed
+// (Brickset's quota resets daily, not monthly like eBay's), same
+// self-healing CREATE TABLE IF NOT EXISTS shape as ensureEbayUsageTable.
+// This can only ever see calls THIS Worker makes (runSeedBatch's own loop
+// below) -- it has no visibility into the app's client-direct Brickset
+// calls, which is exactly why BRICKSET_SEED_DAILY_BUDGET stops well short
+// of the real 100/day ceiling instead of trying to use all of it.
+async function ensureBricksetUsageTable(env) {
+  try {
+    await env.PRICE_CACHE.prepare(
+      "CREATE TABLE IF NOT EXISTS brickset_usage (day_key TEXT PRIMARY KEY, call_count INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)"
+    ).run();
+  } catch (e) {
+    console.error("ensureBricksetUsageTable failed:", e.message);
+  }
+}
+__name(ensureBricksetUsageTable, "ensureBricksetUsageTable");
+function todayKey() {
+  return (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+}
+__name(todayKey, "todayKey");
+async function getBricksetUsageToday(env) {
+  await ensureBricksetUsageTable(env);
+  try {
+    const row = await env.PRICE_CACHE.prepare(
+      "SELECT call_count FROM brickset_usage WHERE day_key = ?"
+    ).bind(todayKey()).first();
+    return row?.call_count ?? 0;
+  } catch (e) {
+    console.error("brickset usage read failed:", e.message);
+    return 0;
+  }
+}
+__name(getBricksetUsageToday, "getBricksetUsageToday");
+async function incrementBricksetUsage(env) {
+  try {
+    await env.PRICE_CACHE.prepare(`
+      INSERT INTO brickset_usage (day_key, call_count, updated_at)
+      VALUES (?, 1, ?)
+      ON CONFLICT(day_key) DO UPDATE SET
+        call_count = call_count + 1, updated_at = excluded.updated_at
+    `).bind(todayKey(), Date.now()).run();
+  } catch (e) {
+    console.error("brickset usage increment failed:", e.message);
+  }
+}
+__name(incrementBricksetUsage, "incrementBricksetUsage");
+async function handleBricksetUsage(env) {
+  const used = await getBricksetUsageToday(env);
+  return json({
+    day: todayKey(),
+    seed_calls_today: used,
+    seed_budget: BRICKSET_SEED_DAILY_BUDGET,
+    seed_budget_remaining: Math.max(0, BRICKSET_SEED_DAILY_BUDGET - used),
+    note: "Only counts this Worker's own seeding calls -- the app's direct retail/extras/barcode lookups aren't visible here, which is why the seed budget stops well short of Brickset's real 100/day cap."
+  });
+}
+__name(handleBricksetUsage, "handleBricksetUsage");
 async function runSeedBatch(env) {
   if (!env.PRICE_CACHE) return { ok: false, reason: "no_db" };
   await ensureMonthlyCatchupColumn(env);
@@ -2526,6 +2600,8 @@ async function runSeedBatch(env) {
     batch = await getNextSeedBatch(env, DAILY_SEED_LIMIT);
   }
   if (batch.length === 0) return { ok: true, seeded: 0, skipped: 0, errors: 0, processed: 0, queue_empty: true, discovery: discoveryResult, monthly_catchup: monthlyCatchup };
+  let usedToday = await getBricksetUsageToday(env);
+  let budgetExhausted = false;
   let seeded = 0, skipped = 0, errors = 0, processed = 0;
   for (const set of batch) {
     processed++;
@@ -2538,10 +2614,20 @@ async function runSeedBatch(env) {
       }
     } catch (_) {
     }
+    // Stop before making the live call once today's reserved seeding
+    // budget is spent -- whatever's left in `batch` just stays queued for
+    // a later run (removeFromQueue only ever happens once a set is
+    // actually resolved one way or another, so nothing here is lost).
+    if (usedToday >= BRICKSET_SEED_DAILY_BUDGET) {
+      budgetExhausted = true;
+      break;
+    }
     try {
       const params = JSON.stringify({ setNumber: `${set.n}-1`, pageSize: 1 });
       const bsUrl = `https://brickset.com/api/v3.asmx/getSets?apiKey=${encodeURIComponent(bsKey)}&userHash=&params=${encodeURIComponent(params)}`;
       const resp = await fetch(bsUrl, { headers: { "User-Agent": "BrikStax/2.4", "Accept": "application/json" } });
+      usedToday++;
+      await incrementBricksetUsage(env);
       if (!resp.ok) {
         await logSeedError(env, set.n, `HTTP ${resp.status}`);
         errors++;
@@ -2595,7 +2681,7 @@ async function runSeedBatch(env) {
   }
   await env.PRICE_CACHE.prepare("UPDATE seed_progress SET last_run = ? WHERE id = 1").bind((/* @__PURE__ */ new Date()).toISOString()).run();
   const remaining = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM seed_queue").first();
-  return { ok: true, seeded, skipped, errors, processed, queue_remaining: remaining?.cnt ?? 0, discovery: discoveryResult, monthly_catchup: monthlyCatchup };
+  return { ok: true, seeded, skipped, errors, processed, queue_remaining: remaining?.cnt ?? 0, discovery: discoveryResult, monthly_catchup: monthlyCatchup, brickset_calls_today: usedToday, brickset_seed_budget: BRICKSET_SEED_DAILY_BUDGET, budget_exhausted: budgetExhausted };
 }
 __name(runSeedBatch, "runSeedBatch");
 async function handleSeedStatus(env) {
