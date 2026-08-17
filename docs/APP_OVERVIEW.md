@@ -1,10 +1,14 @@
 # BrikStax — What It Is and What It Does
 
+> **Document status:** describes BrikStax as of **v2.3.0+9** (submitted to the App Store and Play Store 2026-08-17). If you're reading this significantly later, treat feature availability as a snapshot, not a guarantee — check `CLAUDE.md`'s dated changelog for anything added since.
+
+> **Quick facts:** LEGO collection tracker + market-value/companion app · iOS and Android (Flutter app + Cloudflare Worker backend) · free, no ads, no subscriptions, no in-app purchases · monetized only through Amazon/eBay affiliate links · no login or account — identity is an anonymous per-device ID · in-app currency ("Briks") is earned through play only, never purchased.
+
 **BrikStax** is a mobile companion app for LEGO collectors and investors — part collection tracker, part price/market intelligence tool, part gamified hobby app. It runs on iOS and Android (built in Flutter), backed by a Cloudflare Worker server for anything that needs to be shared across users, cached, or kept off-device (pricing data, deals, community moderation, crowdsourced barcode data).
 
 The core idea: most LEGO tracking today is either a spreadsheet or a barcode scanner with no context. BrikStax combines "what do I own" with "what is it worth, is it about to retire, and where can I buy what I don't have yet" — then wraps that in a lightweight avatar/rewards layer so checking in feels like more than data entry.
 
-This document describes the app at the product/feature level for anyone (or any AI) that needs to understand what BrikStax does without reading engineering history. For implementation details, architecture, and the dated changelog of how features were built, see `CLAUDE.md` instead — that file is written for whoever (human or AI) is actively modifying the codebase; this one is written for whoever just needs to know what the app *does*.
+This document describes the app at the product/feature level for anyone (or any AI) that needs to understand what BrikStax does without reading engineering history. For implementation details, architecture, and the dated changelog of how features were built, see `CLAUDE.md` instead — that file is written for whoever (human or AI) is actively modifying the codebase; this one is written for whoever just needs to know what the app *does*. A glossary of BrikStax-specific terms is at the bottom — check there first if a term used elsewhere (a support message, a screenshot, a review) is unfamiliar.
 
 ---
 
@@ -89,6 +93,26 @@ Widgets for: total collection value, a random highlighted set from your collecti
 ## 13. Companion Website
 
 A handful of the app's tools also exist as a standalone website (separate from the app, no install required): a landing page, and web versions of the Parts Checker and Parts Merger tools (the web Parts Merger additionally supports custom/MOC builds, which the app version deliberately doesn't). Same visual brand as the app.
+
+---
+
+## Glossary
+
+Terms specific to BrikStax that don't mean what they might elsewhere:
+
+| Term | Meaning |
+|---|---|
+| **Brik(s)** | The app's internal reward currency. Earned only through play (achievements, daily claims, community likes) — never bought with real money. Spent only on unlocking/duplicate-compensating avatar cosmetics. Has no value or use outside the app. |
+| **Brick Den** | The personal "room" scene showing off a user's avatar, trophy shelf, badges, and top-3-value set showcase. Also the name of the home-screen widget that snapshots it. |
+| **Sealed / Open** | Condition of an owned set — factory-sealed vs. opened/built. Tracked as fully separate data (separate price histories, separate market values), not just a label, since they're different products on the resale market. |
+| **Verified / Unverified** | Whether a collection entry was added by scanning a real barcode (verified) or typed in manually (unverified). Verified sets count more toward certain Hidden Theme rewards. |
+| **Retirement window** | The 18–24 month period before a set's retail run typically ends, during which resale prices tend to climb — the app flags sets currently in this window. |
+| **Daily Brick** | The once-a-day currency claim with a streak counter. |
+| **Daily Five** | Five small daily check-in tasks, separate from the Daily Brick claim, with its own optional reminder notification and bonus. |
+| **Hidden Theme** | A semi-secret achievement track tied to collecting specific LEGO theme lines (e.g. completing a Star Wars run), separate from ordinary achievements. |
+| **Set number** | LEGO's own official set identifier (e.g. `75192`), used throughout the app as the primary way to identify a set — in Set Lookup, Parts Checker, Parts Merger, and the wishlist. |
+| **Discover** | The dashboard section housing tools that work on *any* set, owned or not (Set Lookup, Parts Checker) — distinct from "Your Collection," which only covers owned sets. |
+| **Tools** | The renamed Settings tab; houses Parts Merger and other utility-style features that don't fit "Discover" or app configuration. |
 
 ---
 
