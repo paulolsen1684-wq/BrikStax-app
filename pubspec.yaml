@@ -103,6 +103,7 @@ flutter:
     - assets/avatar_pixel/legs/
     - assets/avatar_pixel/items/
     - assets/den_hud/
+    - assets/brand/
 
   uses-material-design: true
 

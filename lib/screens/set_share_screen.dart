@@ -18,6 +18,7 @@ import '../models/lego_set.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/share/photo_backdrop.dart';
+import '../widgets/share/brand_mark.dart';
 
 class SetShareScreen extends StatefulWidget {
   final LegoSet set;
@@ -246,11 +247,7 @@ class _SetShareCard extends StatelessWidget {
           width: double.infinity,
           color: BT.yellow,
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-          child: Row(children: [
-            Text('BRIKSTAX', style: BT.display(size: 22)),
-            const Spacer(),
-            const Text('🧱', style: TextStyle(fontSize: 20)),
-          ]),
+          child: const Row(children: [BrikStaxMark(size: 30)]),
         ),
 
         Padding(

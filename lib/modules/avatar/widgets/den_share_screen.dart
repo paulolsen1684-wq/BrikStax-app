@@ -21,6 +21,7 @@ import '../services/achievement_service.dart';
 import '../../../providers/collection.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/share/photo_backdrop.dart';
+import '../../../widgets/share/brand_mark.dart';
 import 'avatar_widget.dart';
 import '../data/backgrounds_art.dart' as bgArt;
 import 'den_hud.dart';
@@ -280,8 +281,11 @@ class _DenMinimalSticker extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text('BRIKSTAX · MY DEN',
-          style: BT.mono(size: 9, color: Colors.white.withOpacity(.8))),
+      Row(children: [
+        const BrikStaxMark(size: 16),
+        const SizedBox(width: 6),
+        Text('MY DEN', style: BT.mono(size: 9, color: Colors.white.withOpacity(.8))),
+      ]),
       const SizedBox(height: 2),
       Text('$earnedCount', style: BT.display(size: 44, color: BT.yellow)),
       Text('TROPHIES EARNED',
@@ -390,11 +394,8 @@ class _ShareCard extends StatelessWidget {
             color: BT.yellow,
             padding: const EdgeInsets.fromLTRB(16, 13, 16, 11),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Text('BRIKSTAX', style: BT.display(size: 20)),
-                const Spacer(),
-                const Text('🧱', style: TextStyle(fontSize: 18)),
-              ]),
+              const BrikStaxMark(size: 28),
+              const SizedBox(height: 4),
               Text('MY DEN', style: BT.mono(size: 10, color: BT.ink.withOpacity(.6))),
             ]),
           ),

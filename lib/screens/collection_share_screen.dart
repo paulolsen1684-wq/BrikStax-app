@@ -28,6 +28,7 @@ import '../models/lego_set.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/share/photo_backdrop.dart';
+import '../widgets/share/brand_mark.dart';
 
 /// The set of sets being shared, plus what to call it -- computed once from
 /// either an explicit filtered list (Inventory screen, filter active) or
@@ -303,11 +304,8 @@ class _CollectionShareCard extends StatelessWidget {
           color: BT.yellow,
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Text('BRIKSTAX', style: BT.display(size: 22)),
-              const Spacer(),
-              const Text('🧱', style: TextStyle(fontSize: 20)),
-            ]),
+            const BrikStaxMark(size: 32),
+            const SizedBox(height: 4),
             Text(scope.label.toUpperCase(), style: BT.mono(size: 10, color: BT.ink.withOpacity(.6))),
           ]),
         ),
@@ -471,9 +469,13 @@ class _GlassSticker extends StatelessWidget {
           ),
           child: Column(mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${scope.label.toUpperCase()} · BRIKSTAX 🧱',
-                style: BT.mono(size: 9, color: Colors.white.withOpacity(.85)),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
+            Row(children: [
+              Expanded(child: Text(scope.label.toUpperCase(),
+                  style: BT.mono(size: 9, color: Colors.white.withOpacity(.85)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+              const SizedBox(width: 6),
+              const BrikStaxMark(size: 16),
+            ]),
             const SizedBox(height: 10),
             Row(children: [
               _glassStat(scope.count.toString(), 'SETS'),
