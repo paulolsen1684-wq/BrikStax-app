@@ -281,15 +281,16 @@ class _DenMinimalSticker extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(children: [
-        const BrikStaxMark(size: 16),
-        const SizedBox(width: 6),
-        Text('MY DEN', style: BT.mono(size: 9, color: Colors.white.withOpacity(.8))),
-      ]),
+      // No logo mark up here -- the standardized footer below already
+      // carries the icon + "Made with BrikStax", so this stays plain text
+      // to avoid showing the mark twice in one small sticker.
+      Text('MY DEN', style: BT.mono(size: 9, color: Colors.white.withOpacity(.8))),
       const SizedBox(height: 2),
       Text('$earnedCount', style: BT.display(size: 44, color: BT.yellow)),
       Text('TROPHIES EARNED',
           style: BT.mono(size: 9, color: Colors.white.withOpacity(.75))),
+      const SizedBox(height: 10),
+      MadeWithBrikStax(textColor: Colors.white.withOpacity(.75), iconSize: 12),
     ],
   );
 }
@@ -523,12 +524,9 @@ class _ShareCard extends StatelessWidget {
           ),
 
         // Footer / watermark
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text('Track every brick', style: BT.mono(size: 9, color: BT.tx3)),
-            Text('  ·  brikstax', style: BT.mono(size: 9, color: BT.gold)),
-          ]),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 14),
+          child: Center(child: MadeWithBrikStax()),
         ),
         ]),
       ),

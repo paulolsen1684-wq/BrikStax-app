@@ -377,12 +377,9 @@ class _CollectionShareCard extends StatelessWidget {
             ),
           ),
 
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text('Track every brick', style: BT.mono(size: 9, color: BT.tx3)),
-            Text('  ·  brikstax', style: BT.mono(size: 9, color: BT.gold)),
-          ]),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(18, 14, 18, 16),
+          child: Center(child: MadeWithBrikStax()),
         ),
       ]),
     );
@@ -469,19 +466,21 @@ class _GlassSticker extends StatelessWidget {
           ),
           child: Column(mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text(scope.label.toUpperCase(),
-                  style: BT.mono(size: 9, color: Colors.white.withOpacity(.85)),
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-              const SizedBox(width: 6),
-              const BrikStaxMark(size: 16),
-            ]),
+            // No logo mark up here -- the standardized footer below already
+            // carries the icon + "Made with BrikStax", so this stays plain
+            // text to avoid showing the mark twice on one panel.
+            Text(scope.label.toUpperCase(),
+                style: BT.mono(size: 9, color: Colors.white.withOpacity(.85)),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 10),
             Row(children: [
               _glassStat(scope.count.toString(), 'SETS'),
               _glassStat(scope.sealedCount.toString(), 'SEALED'),
               _glassStat(roiText, 'ROI', valueColor: roiColor),
             ]),
+            const SizedBox(height: 12),
+            Center(child: MadeWithBrikStax(
+                textColor: Colors.white.withOpacity(.8), iconSize: 12)),
           ]),
         ),
       ),

@@ -9,6 +9,7 @@
 // beside a logo that already spells out the name would just show the brand
 // name twice in the same spot.
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 class BrikStaxMark extends StatelessWidget {
   final double size;
@@ -19,5 +20,28 @@ class BrikStaxMark extends StatelessWidget {
     'assets/brand/brikstax_mark.png',
     width: size,
     height: size,
+  );
+}
+
+/// The standardized bottom-of-image credit line, icon + text together --
+/// replaces every card's own previously-inconsistent footer text ("Track
+/// every brick · brikstax", the Slab's "BRIKSTAX AUTHENTICATED · TRACK
+/// EVERY BRICK", or nothing at all on Collection's glass panel/Den's
+/// minimal sticker). [textColor] needs to be passed per context since this
+/// shows up against very different backgrounds -- a white card, a cream
+/// footer bar, a translucent glass panel, or straight on a photo.
+class MadeWithBrikStax extends StatelessWidget {
+  final Color textColor;
+  final double iconSize;
+  const MadeWithBrikStax({super.key, this.textColor = BT.tx3, this.iconSize = 13});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      BrikStaxMark(size: iconSize),
+      const SizedBox(width: 6),
+      Text('Made with BrikStax', style: BT.mono(size: 9, color: textColor)),
+    ],
   );
 }

@@ -322,12 +322,9 @@ class _SetShareCard extends StatelessWidget {
           ),
         ),
 
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text('Track every brick', style: BT.mono(size: 9, color: BT.tx3)),
-            Text('  ·  brikstax', style: BT.mono(size: 9, color: BT.gold)),
-          ]),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(18, 14, 18, 16),
+          child: Center(child: MadeWithBrikStax()),
         ),
       ]),
     );
@@ -425,9 +422,8 @@ class _SlabSticker extends StatelessWidget {
         Container(
           width: double.infinity,
           color: BT.cream2,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          child: Text('BRIKSTAX AUTHENTICATED · TRACK EVERY BRICK',
-              style: BT.mono(size: 7.5, color: BT.tx2)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: const Center(child: MadeWithBrikStax(iconSize: 11)),
         ),
       ]),
     );
