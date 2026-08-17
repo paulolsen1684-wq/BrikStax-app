@@ -10,6 +10,7 @@
 // depend on brick_den.dart internals. Captures via RepaintBoundary and shares
 // with share_plus (XFile.fromData — no path_provider needed).
 
+import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -19,6 +20,7 @@ import '../models/avatar_state.dart';
 import '../services/achievement_service.dart';
 import '../../../providers/collection.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/share/photo_backdrop.dart';
 import 'avatar_widget.dart';
 import '../data/backgrounds_art.dart' as bgArt;
 import 'den_hud.dart';
@@ -34,7 +36,13 @@ class DenShareScreen extends StatefulWidget {
 class _State extends State<DenShareScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   DenShareMode _mode = DenShareMode.stats;
+  File? _photo;
   bool _sharing = false;
+
+  Future<void> _pickPhoto() async {
+    final photo = await pickBackdropPhoto(context);
+    if (photo != null) setState(() => _photo = photo);
+  }
 
   @override
   void didChangeDependencies() {
@@ -130,6 +138,33 @@ class _State extends State<DenShareScreen> {
           child: Column(children: [
             // A/B/C toggle
             _ModeToggle(mode: _mode, onChanged: (m) => setState(() => _mode = m)),
+            const SizedBox(height: 10),
+
+            // Optional photo backdrop -- turns the card into a sticker over
+            // your own photo instead of its plain themed background, same
+            // helper set_share_screen.dart/collection_share_screen.dart use.
+            Row(children: [
+              Expanded(child: _PhotoPill(
+                icon: _photo == null ? Icons.add_a_photo_outlined : Icons.sync_outlined,
+                label: _photo == null ? 'Add a photo' : 'Change photo',
+                onTap: _pickPhoto,
+              )),
+              if (_photo != null) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => setState(() => _photo = null),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: BT.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: BT.ink, width: BT.bw),
+                    ),
+                    child: const Icon(Icons.close, size: 15, color: BT.ink),
+                  ),
+                ),
+              ],
+            ]),
             const SizedBox(height: 16),
 
             // Capturable card. FittedBox scales the 504px card down to fit the
@@ -139,16 +174,19 @@ class _State extends State<DenShareScreen> {
               fit: BoxFit.scaleDown,
               child: RepaintBoundary(
                 key: _boundaryKey,
-                child: _ShareCard(
-                  state: state,
-                  earned: earned,
-                  top3: top3,
-                  top3Colors: top3Colors,
-                  mode: _mode,
-                  sets: col.count,
-                  sealed: col.sealedCount,
-                  market: col.totalMarket,
-                  byTheme: col.byTheme,
+                child: PhotoBackdropCard(
+                  photo: _photo,
+                  card: _ShareCard(
+                    state: state,
+                    earned: earned,
+                    top3: top3,
+                    top3Colors: top3Colors,
+                    mode: _mode,
+                    sets: col.count,
+                    sealed: col.sealedCount,
+                    market: col.totalMarket,
+                    byTheme: col.byTheme,
+                  ),
                 ),
               ),
             ),
@@ -193,6 +231,33 @@ class _State extends State<DenShareScreen> {
       ]),
     );
   }
+}
+
+// ── Photo backdrop pill ─────────────────────────────────────────────────────
+class _PhotoPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _PhotoPill({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+      decoration: BoxDecoration(
+        color: BT.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: BT.ink, width: BT.bw),
+        boxShadow: BT.shadowSm,
+      ),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(icon, size: 15, color: BT.ink),
+        const SizedBox(width: 6),
+        Text(label, style: BT.mono(size: 10, color: BT.ink)),
+      ]),
+    ),
+  );
 }
 
 // ── A/B/C toggle ──────────────────────────────────────────────────────────────

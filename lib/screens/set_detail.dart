@@ -13,6 +13,7 @@ import '../theme/app_themes.dart';
 import '../widgets/atoms.dart';
 import '../widgets/sheets.dart';
 import 'parts_checker_screen.dart';
+import 'set_share_screen.dart';
 
 class SetDetailScreen extends StatefulWidget {
   final String setId;
@@ -88,6 +89,11 @@ class _State extends State<SetDetailScreen>
                   top: MediaQuery.of(context).padding.top + 10,
                   left: 12,
                   child: _HeroBackButton(),
+                ),
+                Positioned(
+                  top: MediaQuery.of(context).padding.top + 10,
+                  right: 12,
+                  child: _HeroShareButton(set: s),
                 ),
               ]),
             ),
@@ -388,6 +394,25 @@ class _HeroBackButton extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+    ),
+  );
+}
+
+class _HeroShareButton extends StatelessWidget {
+  final LegoSet set;
+  const _HeroShareButton({required this.set});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: () => Navigator.push(context,
+        MaterialPageRoute(builder: (_) => SetShareScreen(set: set))),
+    child: Container(
+      width: 36, height: 36,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(.35),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.ios_share, color: Colors.white, size: 18),
     ),
   );
 }

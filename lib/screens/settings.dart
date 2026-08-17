@@ -17,6 +17,7 @@ import '../modules/avatar/widgets/den_layout_tuner_screen.dart';
 import 'push_test_screen.dart';
 import 'deal_history_screen.dart';
 import 'parts_merger_screen.dart';
+import 'collection_share_screen.dart';
 import '../services/push_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/device_identity.dart';
@@ -90,6 +91,14 @@ class _State extends State<SettingsScreen> {
             sub: 'Combine piece lists from up to 20 sets into one BrickLink export',
             onTap: () => Navigator.push(context, MaterialPageRoute(
                 builder: (_) => const PartsMergerScreen())),
+          ),
+          _tile(bt,
+            icon: Icons.ios_share, bg: const Color(0xFFFFF3D6),
+            iconColor: BT.gold,
+            title: 'Share Your Collection',
+            sub: 'A stat card for Instagram & co. — dollar amounts hidden by default',
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const CollectionShareScreen())),
           ),
 
           // ── Deals ────────────────────────────────────────────────────────
