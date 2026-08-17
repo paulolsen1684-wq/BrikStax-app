@@ -264,9 +264,20 @@ class _State extends State<WishlistScreen> {
     Expanded(child: _buyChip(bt, 'Amazon', BT.orange,
         () => _openBuyLink(amazonSearchUrl(w.num, w.name)))),
     const SizedBox(width: 6),
-    Expanded(child: _buyChip(bt, 'eBay', BT.blue,
-        () => _openBuyLink(ebaySearchUrl(w.num, w.name)))),
+    Expanded(child: _buyChip(bt, 'eBay', BT.blue, () => _openEbayLink(w))),
   ]);
+
+  // Tries a real, currently-active listing first (Api.fetchEbayProductUrl,
+  // the official eBay Browse API) and falls back to the plain search link
+  // whenever that comes back null -- including the common case where
+  // EBAY_CLIENT_ID/SECRET just aren't configured on the Worker yet (see
+  // handleEbayProduct's doc comment). No loading indicator: worst case
+  // this takes a moment before the browser opens, same as any other
+  // external-link tap elsewhere in the app.
+  Future<void> _openEbayLink(WishlistItem w) async {
+    final direct = await Api.instance.fetchEbayProductUrl(w.num, w.name);
+    await _openBuyLink(direct ?? ebaySearchUrl(w.num, w.name));
+  }
 
   Widget _buyChip(BrikStaxColors bt, String label, Color color, VoidCallback onTap) =>
       GestureDetector(

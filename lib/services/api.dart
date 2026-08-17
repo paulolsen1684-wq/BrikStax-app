@@ -479,6 +479,28 @@ class Api {
       return null;
     }
   }
+
+  /// A real, currently-active eBay listing for a set, via the Worker's
+  /// GET /ebay/product (the official eBay Browse API, not the RapidAPI
+  /// sold-price one above) -- returns null whenever nothing's found,
+  /// including the common "EBAY_CLIENT_ID/SECRET not configured yet" case
+  /// (see cloudflare-worker/worker.js's handleEbayProduct), so callers
+  /// should always have a plain search-link fallback ready, not treat
+  /// null as an error state worth surfacing.
+  Future<String?> fetchEbayProductUrl(String num, String name) async {
+    try {
+      final r = await _client.get(
+        Uri.parse('${K.workerUrl}ebay/product'
+            '?set=${Uri.encodeComponent(num)}&name=${Uri.encodeComponent(name)}'),
+      ).timeout(const Duration(seconds: 10));
+      if (r.statusCode != 200) return null;
+      final d = jsonDecode(r.body) as Map<String, dynamic>;
+      if (d['found'] != true) return null;
+      return d['url'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 class ApiException implements Exception {
