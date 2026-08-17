@@ -29,6 +29,7 @@ import '../modules/avatar/widgets/wishlist_dashboard_card.dart';
 import '../modules/avatar/widgets/set_lookup_card.dart';
 import '../modules/avatar/widgets/parts_checker_card.dart';
 import '../modules/avatar/data/backgrounds_art.dart' as bgArt;
+import 'collection_share_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -450,12 +451,18 @@ class _Hero extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-          Text('BrikStax', style: BT.display(size: 28, color: txColor)),
-          Text(
-            '${col.count} set${col.count != 1 ? "s" : ""}  ·  '
-            'track every brick',
-            style: BT.mono(size: 10, color: tx3Color),
-          ),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text('BrikStax', style: BT.display(size: 28, color: txColor)),
+              Text(
+                '${col.count} set${col.count != 1 ? "s" : ""}  ·  '
+                'track every brick',
+                style: BT.mono(size: 10, color: tx3Color),
+              ),
+            ])),
+            _HeroShareButton(useWhiteText: useWhiteText),
+          ]),
 
           if (market > 0) ...[
             const SizedBox(height: 16),
@@ -505,6 +512,35 @@ class _Hero extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Hero share button ─────────────────────────────────────────────────────────
+// Was buried in Settings > Tools before this -- wrong precedent to follow
+// (that's where Parts Merger lives, a low-frequency utility someone
+// deliberately goes looking for). A share card's whole value comes from
+// being reached for in the moment, right where its data is shown -- same
+// reasoning already applied to Set (share icon on set_detail's own hero)
+// and Den (share icon on the Den screen itself). This makes Collection
+// consistent with both instead of the one outlier.
+class _HeroShareButton extends StatelessWidget {
+  final bool useWhiteText;
+  const _HeroShareButton({required this.useWhiteText});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: () => Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const CollectionShareScreen())),
+    child: Container(
+      width: 36, height: 36,
+      decoration: BoxDecoration(
+        color: useWhiteText ? Colors.black.withOpacity(.3) : BT.yellow,
+        shape: BoxShape.circle,
+        border: useWhiteText ? null : Border.all(color: BT.ink, width: BT.bw),
+      ),
+      child: Icon(Icons.ios_share, size: 17,
+          color: useWhiteText ? Colors.white : BT.ink),
+    ),
+  );
 }
 
 // ── Today mini card ────────────────────────────────────────────────────────────
