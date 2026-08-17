@@ -177,9 +177,7 @@ class _DenSceneContentState extends State<DenSceneContent>
     // comment for the row-43-grounding rationale.
     final avatarRect = denAvatarRect(pxd);
 
-    return RepaintBoundary(
-      key: _repaintKey,
-      child: ListenableBuilder(
+    return ListenableBuilder(
       listenable: svc,
       builder: (_, __) {
         final state  = svc.state;
@@ -193,7 +191,23 @@ class _DenSceneContentState extends State<DenSceneContent>
         return SingleChildScrollView(child: Column(children: [
 
           // ── The room (pixel art — always dark) ──────────────────
-          Center(child: SizedBox(
+          // RepaintBoundary scoped to exactly this box now, not the whole
+          // scrollable page below (fixed 2026-08-16, real bug: the Den
+          // widget showed a cropped/incomplete den). DenScreenshotService
+          // .captureDen() calls toImage() on whatever RenderRepaintBoundary
+          // this key resolves to -- a boundary wrapping a
+          // SingleChildScrollView gets its SIZE from the scroll view's
+          // VIEWPORT, not the room's actual sceneW x sceneH, so the
+          // captured image was whatever happened to be visible on screen
+          // at capture time: cropped short if the room didn't fully fit
+          // the viewport (e.g. the Avatar Editor's more cramped Den tab,
+          // header+preview+tabbar eating into the available height), or
+          // padded with unrelated trophy-card content otherwise -- never
+          // reliably "the whole den" either way. Scoping the boundary to
+          // this fixed-size box guarantees the capture is always exactly
+          // the complete room, regardless of scroll position or which
+          // screen embeds DenSceneContent.
+          RepaintBoundary(key: _repaintKey, child: Center(child: SizedBox(
             width: sceneW, height: sceneH,
             child: Stack(children: [
               if (bgArt.denImageAsset(state.backgroundId) case final asset?)
@@ -231,7 +245,7 @@ class _DenSceneContentState extends State<DenSceneContent>
                 groundAccessoryWidget(accessory: acc, pxd: pxd),
               ...denHudWidgets(pxd: pxd, earned: earned),
             ]),
-          )),
+          ))),
 
           // Showcase labels
           if (top3.isNotEmpty)
@@ -390,7 +404,6 @@ class _DenSceneContentState extends State<DenSceneContent>
           ),
         ]));
       },
-      ),
     );
   }
 }
