@@ -1726,6 +1726,7 @@ var worker_default = {
     if (path.startsWith("/community/photo/") && request.method === "GET") return handleCommunityPhoto(url, env);
     if (path === "/ebay" && request.method === "POST") return handleEbay(request, env);
     if (path === "/ebay" && request.method === "GET") return checkEbayCache(url, env);
+    if (path === "/ebay/product" && request.method === "GET") return handleEbayProduct(url, env);
     if (path === "/ebay/usage" && request.method === "GET") return handleEbayUsage(env);
     if (path === "/brickset/usage" && request.method === "GET") return handleBricksetUsage(env);
     if (path === "/admin/activity" && request.method === "GET") return handleAdminActivity(env);
@@ -2307,6 +2308,96 @@ function buildEbayAffiliateLink(rawUrl) {
   return u.toString();
 }
 __name(buildEbayAffiliateLink, "buildEbayAffiliateLink");
+// ── eBay Browse API (official, OAuth2 client-credentials) ──────────────────
+// Finds a real, currently-active listing for a set to link straight to --
+// unlike EBAY_KEY above (a third-party RapidAPI key, "ebay-average-
+// selling-price"), which only ever returns SOLD-listing price averages,
+// never a link to buy something right now. Needs its own credentials
+// (EBAY_CLIENT_ID/EBAY_CLIENT_SECRET, an eBay Developer "Application Keys"
+// keyset -- a DIFFERENT eBay program from the Partner Network campaign id
+// above, even though both live under the same eBay account). Added
+// 2026-08-16, deliberately fails soft: handleEbayProduct returns
+// {found:false} rather than an error status when the secrets aren't
+// configured yet, so the app can fall back to a plain search link without
+// this ever breaking anything.
+var _ebayAppTokenCache = { accessToken: null, expiresAt: 0 };
+async function getEbayAppToken(env) {
+  const now = Date.now();
+  if (_ebayAppTokenCache.accessToken && _ebayAppTokenCache.expiresAt > now + 6e4) {
+    return _ebayAppTokenCache.accessToken;
+  }
+  if (!env.EBAY_CLIENT_ID || !env.EBAY_CLIENT_SECRET) {
+    throw new Error("EBAY_CLIENT_ID/EBAY_CLIENT_SECRET not configured");
+  }
+  const basic = btoa(`${env.EBAY_CLIENT_ID}:${env.EBAY_CLIENT_SECRET}`);
+  const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `Basic ${basic}`
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      scope: "https://api.ebay.com/oauth/api_scope"
+    })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.access_token) {
+    throw new Error(`eBay token exchange failed: ${res.status} ${JSON.stringify(data)}`);
+  }
+  _ebayAppTokenCache = {
+    accessToken: data.access_token,
+    expiresAt: now + (data.expires_in || 7200) * 1e3
+  };
+  return data.access_token;
+}
+__name(getEbayAppToken, "getEbayAppToken");
+// category_ids 19006 = the same LEGO/Building Toys category id already
+// used for the RapidAPI eBay pricing calls elsewhere in this file --
+// reused here for consistency, not re-derived. conditions:{NEW} +
+// buyingOptions:{FIXED_PRICE} matches "I want to buy this sealed, right
+// now" intent (a wishlist item), not an auction or used listing.
+async function handleEbayProduct(url, env) {
+  const num = url.searchParams.get("set");
+  const name = url.searchParams.get("name") || "";
+  if (!num) return err("Missing set param");
+  let token;
+  try {
+    token = await getEbayAppToken(env);
+  } catch (e) {
+    return json({ found: false, reason: "not_configured" });
+  }
+  const q = `LEGO ${num} ${name}`.trim();
+  try {
+    const searchUrl = `https://api.ebay.com/buy/browse/v1/item_summary/search?` + `q=${encodeURIComponent(q)}&category_ids=19006` + `&filter=${encodeURIComponent("buyingOptions:{FIXED_PRICE},conditions:{NEW}")}` + `&limit=5`;
+    const res = await fetch(searchUrl, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US"
+      }
+    });
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      return json({ found: false, reason: `ebay_http_${res.status}`, detail: bodyText.slice(0, 300) });
+    }
+    const data = await res.json();
+    const items = data.itemSummaries || [];
+    if (items.length === 0) return json({ found: false, reason: "no_results" });
+    const best = items[0];
+    const affiliateUrl = buildEbayAffiliateLink(best.itemWebUrl);
+    return json({
+      found: true,
+      url: affiliateUrl,
+      title: best.title,
+      price: best.price ? parseFloat(best.price.value) : null,
+      currency: best.price ? best.price.currency : null,
+      imageUrl: best.image ? best.image.imageUrl : null
+    });
+  } catch (e) {
+    return json({ found: false, reason: "error", detail: e.message });
+  }
+}
+__name(handleEbayProduct, "handleEbayProduct");
 async function handleDealsGet(url, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "20"), 50);
