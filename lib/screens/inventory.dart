@@ -8,6 +8,7 @@ import '../theme/app_themes.dart';
 import '../widgets/set_card.dart';
 import 'add_set.dart';
 import 'set_detail.dart';
+import 'collection_share_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -23,6 +24,20 @@ class _State extends State<InventoryScreen> {
 
   @override
   void dispose() { _search.dispose(); super.dispose(); }
+
+  // Sort alone doesn't change WHICH sets are being shown, only their order,
+  // so it doesn't count as "filtered" for share purposes -- only condition/
+  // theme/search actually narrow the set.
+  bool get _isFiltered => _q.isNotEmpty || _cond != 'all' || _theme != 'all';
+
+  String get _shareLabel {
+    final parts = <String>[];
+    if (_theme != 'all') parts.add(_theme);
+    if (_cond != 'all')  parts.add(_cond == 'sealed' ? 'Sealed' : 'Open');
+    if (parts.isEmpty && _q.isNotEmpty) return '"$_q"';
+    if (parts.isEmpty) return 'My Collection';
+    return 'My ${parts.join(' · ')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +93,32 @@ class _State extends State<InventoryScreen> {
                     child: Row(children: [
                       Text('BrikStax', style: BT.display(size: 26)),
                       const Spacer(),
+                      // Lives here, not on the Dashboard -- this screen
+                      // already knows exactly which sets are on screen
+                      // (search/condition/theme filters applied), so a
+                      // share triggered from here can reflect that view
+                      // ("My Star Wars Collection") instead of always
+                      // being the whole collection. See collection_share_
+                      // screen.dart's own doc comment for the full story.
+                      GestureDetector(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => CollectionShareScreen(
+                              scopedSets: _isFiltered ? sets : null,
+                              scopedLabel: _isFiltered ? _shareLabel : null,
+                            ))),
+                        child: Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            color: bt.cardBg,
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: bt.cardBorder, width: BT.bw),
+                            boxShadow: [BoxShadow(color: bt.shadowColor,
+                                offset: const Offset(2, 2))],
+                          ),
+                          child: Icon(Icons.ios_share, color: bt.tx, size: 18),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       GestureDetector(
                         onTap: () => Navigator.push(context, MaterialPageRoute(
                             builder: (_) => const AddSetScreen())),

@@ -1,12 +1,22 @@
 // lib/screens/collection_share_screen.dart
 //
-// Share card for the whole collection -- total ROI% is always shown (it's
-// a percentage, not a dollar figure), but total cost paid and total market
-// value default to hidden, same privacy stance as set_share_screen.dart,
-// with a toggle to reveal them. Same RepaintBoundary -> PNG -> share_plus
-// capture pattern den_share_screen.dart established, plus the optional
-// photo-backdrop step shared with it and set_share_screen.dart via
-// widgets/share/photo_backdrop.dart.
+// Share card for the whole collection, OR a filtered view of it -- entry
+// point lives on the Inventory screen (inventory.dart's share icon), which
+// passes [scopedSets]/[scopedLabel] whenever a theme/condition/search
+// filter is active there ("My Star Wars Collection" computed from just
+// those sets, not the whole thing). No filter active -> both params are
+// null and this reads the whole CollectionProvider, same as before this
+// scoping existed. Moved here from a short-lived Dashboard-hero placement
+// (see CLAUDE.md) after user feedback that Inventory -- where you're
+// already looking at a specific set of sets -- makes more sense than a
+// flat "always the whole collection" button elsewhere.
+//
+// Total ROI% is always shown (it's a percentage, not a dollar figure), but
+// total cost paid and total market value default to hidden, same privacy
+// stance as set_share_screen.dart, with a toggle to reveal them. Same
+// RepaintBoundary -> PNG -> share_plus capture pattern den_share_screen.dart
+// established, plus the optional photo-backdrop step shared with it and
+// set_share_screen.dart via widgets/share/photo_backdrop.dart.
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -19,8 +29,50 @@ import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/share/photo_backdrop.dart';
 
+/// The set of sets being shared, plus what to call it -- computed once from
+/// either an explicit filtered list (Inventory screen, filter active) or
+/// the whole collection (no filter, or reached some other way). Mirrors
+/// CollectionProvider's own aggregate formulas (portfolioRoi/topGainers/
+/// byTheme) but over an arbitrary subset instead of always everything.
+class _ShareScope {
+  final String label;
+  final List<LegoSet> sets;
+  const _ShareScope({required this.label, required this.sets});
+
+  int get count => sets.length;
+  int get sealedCount => sets.where((s) => s.status == 'sealed').length;
+  double get totalMarket => sets.fold(0.0, (a, s) => a + (s.ebayAvg ?? 0));
+  double get _totalEffective =>
+      sets.fold(0.0, (a, s) => a + (s.effectivePaid ?? s.paid ?? 0));
+
+  double? get roi {
+    final basis = _totalEffective;
+    if (basis == 0 || totalMarket == 0) return null;
+    return (totalMarket - basis) / basis * 100;
+  }
+
+  List<LegoSet> get topGainers {
+    final priced = sets.where((s) => s.roi != null).toList()
+      ..sort((a, b) => b.roi!.compareTo(a.roi!));
+    return priced.take(3).toList();
+  }
+
+  Map<String, int> get byTheme {
+    final map = <String, int>{};
+    for (final s in sets) {
+      final t = s.theme?.split(' > ').first ?? 'Unknown';
+      map[t] = (map[t] ?? 0) + 1;
+    }
+    final entries = map.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Map.fromEntries(entries);
+  }
+}
+
 class CollectionShareScreen extends StatefulWidget {
-  const CollectionShareScreen({super.key});
+  final List<LegoSet>? scopedSets;
+  final String? scopedLabel;
+  const CollectionShareScreen({super.key, this.scopedSets, this.scopedLabel});
   @override State<CollectionShareScreen> createState() => _State();
 }
 
@@ -70,7 +122,9 @@ class _State extends State<CollectionShareScreen> {
   @override
   Widget build(BuildContext context) {
     final bt = context.bt;
-    final col = context.watch<CollectionProvider>();
+    final scope = widget.scopedSets != null
+        ? _ShareScope(label: widget.scopedLabel ?? 'My Collection', sets: widget.scopedSets!)
+        : _ShareScope(label: 'My Collection', sets: context.watch<CollectionProvider>().sets);
 
     return Scaffold(
       backgroundColor: bt.surface,
@@ -99,7 +153,10 @@ class _State extends State<CollectionShareScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text('Share your collection', style: BT.display(size: 22, color: bt.tx)),
+                Expanded(child: Text(
+                    widget.scopedSets != null ? 'Share "${scope.label}"' : 'Share your collection',
+                    style: BT.display(size: 22, color: bt.tx),
+                    maxLines: 1, overflow: TextOverflow.ellipsis)),
               ]),
             ),
           ),
@@ -138,8 +195,8 @@ class _State extends State<CollectionShareScreen> {
                   photo: _photo,
                   scrim: false, // the glass panel supplies its own contrast via blur
                   card: _photo == null
-                      ? _CollectionShareCard(col: col, showDollars: _showDollars)
-                      : _GlassSticker(col: col, showDollars: _showDollars),
+                      ? _CollectionShareCard(scope: scope, showDollars: _showDollars)
+                      : _GlassSticker(scope: scope, showDollars: _showDollars),
                 ),
               ),
             ),
@@ -215,9 +272,9 @@ class _PillToggle extends StatelessWidget {
 // ── The composed share card (fixed BT.* colors, same rule den_share_card.dart
 //    documents -- always looks the same regardless of the app's theme) ────────
 class _CollectionShareCard extends StatelessWidget {
-  final CollectionProvider col;
+  final _ShareScope scope;
   final bool showDollars;
-  const _CollectionShareCard({required this.col, required this.showDollars});
+  const _CollectionShareCard({required this.scope, required this.showDollars});
 
   static String _fmt(double v) {
     if (v.abs() >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
@@ -226,11 +283,11 @@ class _CollectionShareCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final roi = col.portfolioRoi;
-    final themes = col.byTheme.entries.toList()
+    final roi = scope.roi;
+    final themes = scope.byTheme.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final topThemes = themes.take(3).toList();
-    final topGainers = col.topGainers.take(3).toList();
+    final topGainers = scope.topGainers.take(3).toList();
 
     return Container(
       width: 460,
@@ -251,7 +308,7 @@ class _CollectionShareCard extends StatelessWidget {
               const Spacer(),
               const Text('🧱', style: TextStyle(fontSize: 20)),
             ]),
-            Text('MY COLLECTION', style: BT.mono(size: 10, color: BT.ink.withOpacity(.6))),
+            Text(scope.label.toUpperCase(), style: BT.mono(size: 10, color: BT.ink.withOpacity(.6))),
           ]),
         ),
 
@@ -284,12 +341,12 @@ class _CollectionShareCard extends StatelessWidget {
             border: Border.all(color: BT.ink, width: BT.bw),
           ),
           child: Row(children: [
-            _stat(col.count.toString(), 'SETS'),
+            _stat(scope.count.toString(), 'SETS'),
             _divider(),
-            _stat(col.sealedCount.toString(), 'SEALED'),
+            _stat(scope.sealedCount.toString(), 'SEALED'),
             _divider(),
             _stat(showDollars
-                ? (col.totalMarket > 0 ? '\$${_fmt(col.totalMarket)}' : '—')
+                ? (scope.totalMarket > 0 ? '\$${_fmt(scope.totalMarket)}' : '—')
                 : '🔒', 'MARKET', color: BT.green),
           ]),
         ),
@@ -380,9 +437,9 @@ class _CollectionShareCard extends StatelessWidget {
 // stuck on top of it, and supplies its own contrast without needing the
 // scrim (see scrim:false where this is used).
 class _GlassSticker extends StatelessWidget {
-  final CollectionProvider col;
+  final _ShareScope scope;
   final bool showDollars;
-  const _GlassSticker({required this.col, required this.showDollars});
+  const _GlassSticker({required this.scope, required this.showDollars});
 
   static String _fmt(double v) {
     if (v.abs() >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
@@ -391,14 +448,14 @@ class _GlassSticker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final roi = col.portfolioRoi;
+    final roi = scope.roi;
     final roiColor = roi == null
         ? Colors.white
         : (roi >= 0 ? const Color(0xFF4EE896) : const Color(0xFFFF8A80));
     final roiText = roi == null
         ? '—'
         : '${roi >= 0 ? '+' : ''}${roi.toStringAsFixed(0)}%'
-          '${showDollars && col.totalMarket > 0 ? ' · \$${_fmt(col.totalMarket)}' : ''}';
+          '${showDollars && scope.totalMarket > 0 ? ' · \$${_fmt(scope.totalMarket)}' : ''}';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
@@ -414,12 +471,13 @@ class _GlassSticker extends StatelessWidget {
           ),
           child: Column(mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('MY COLLECTION · BRIKSTAX 🧱',
-                style: BT.mono(size: 9, color: Colors.white.withOpacity(.85))),
+            Text('${scope.label.toUpperCase()} · BRIKSTAX 🧱',
+                style: BT.mono(size: 9, color: Colors.white.withOpacity(.85)),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 10),
             Row(children: [
-              _glassStat(col.count.toString(), 'SETS'),
-              _glassStat(col.sealedCount.toString(), 'SEALED'),
+              _glassStat(scope.count.toString(), 'SETS'),
+              _glassStat(scope.sealedCount.toString(), 'SEALED'),
               _glassStat(roiText, 'ROI', valueColor: roiColor),
             ]),
           ]),
