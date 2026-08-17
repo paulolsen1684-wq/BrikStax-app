@@ -136,7 +136,10 @@ class _State extends State<CollectionShareScreen> {
                 key: _boundaryKey,
                 child: PhotoBackdropCard(
                   photo: _photo,
-                  card: _CollectionShareCard(col: col, showDollars: _showDollars),
+                  scrim: false, // the glass panel supplies its own contrast via blur
+                  card: _photo == null
+                      ? _CollectionShareCard(col: col, showDollars: _showDollars)
+                      : _GlassSticker(col: col, showDollars: _showDollars),
                 ),
               ),
             ),
@@ -368,4 +371,68 @@ class _CollectionShareCard extends StatelessWidget {
   );
 
   Widget _divider() => Container(width: BT.bw, height: 44, color: BT.ink);
+}
+
+// ── Photo-backdrop sticker: Strava-style frosted glass panel ────────────────
+// A real material departure from BrikStax's usual hard-ink-border "brick"
+// language everywhere else in the app -- deliberate for this one spot, since
+// a translucent blurred panel reads as part of the photo rather than a card
+// stuck on top of it, and supplies its own contrast without needing the
+// scrim (see scrim:false where this is used).
+class _GlassSticker extends StatelessWidget {
+  final CollectionProvider col;
+  final bool showDollars;
+  const _GlassSticker({required this.col, required this.showDollars});
+
+  static String _fmt(double v) {
+    if (v.abs() >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
+    return v.toStringAsFixed(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roi = col.portfolioRoi;
+    final roiColor = roi == null
+        ? Colors.white
+        : (roi >= 0 ? const Color(0xFF4EE896) : const Color(0xFFFF8A80));
+    final roiText = roi == null
+        ? '—'
+        : '${roi >= 0 ? '+' : ''}${roi.toStringAsFixed(0)}%'
+          '${showDollars && col.totalMarket > 0 ? ' · \$${_fmt(col.totalMarket)}' : ''}';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          width: 460,
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(.16),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(.4), width: 1.5),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('MY COLLECTION · BRIKSTAX 🧱',
+                style: BT.mono(size: 9, color: Colors.white.withOpacity(.85))),
+            const SizedBox(height: 10),
+            Row(children: [
+              _glassStat(col.count.toString(), 'SETS'),
+              _glassStat(col.sealedCount.toString(), 'SEALED'),
+              _glassStat(roiText, 'ROI', valueColor: roiColor),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _glassStat(String value, String label, {Color valueColor = Colors.white}) => Expanded(
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(value, style: BT.display(size: 17, color: valueColor),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+      Text(label, style: BT.mono(size: 7, color: Colors.white.withOpacity(.7))),
+    ]),
+  );
 }

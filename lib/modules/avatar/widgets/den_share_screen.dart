@@ -176,17 +176,22 @@ class _State extends State<DenShareScreen> {
                 key: _boundaryKey,
                 child: PhotoBackdropCard(
                   photo: _photo,
-                  card: _ShareCard(
-                    state: state,
-                    earned: earned,
-                    top3: top3,
-                    top3Colors: top3Colors,
-                    mode: _mode,
-                    sets: col.count,
-                    sealed: col.sealedCount,
-                    market: col.totalMarket,
-                    byTheme: col.byTheme,
-                  ),
+                  // Robinhood-style: just floating typography, no card
+                  // background of its own -- genuinely needs the scrim
+                  // (PhotoBackdropCard's default) for legibility.
+                  card: _photo == null
+                      ? _ShareCard(
+                          state: state,
+                          earned: earned,
+                          top3: top3,
+                          top3Colors: top3Colors,
+                          mode: _mode,
+                          sets: col.count,
+                          sealed: col.sealedCount,
+                          market: col.totalMarket,
+                          byTheme: col.byTheme,
+                        )
+                      : _DenMinimalSticker(earnedCount: earned.length),
                 ),
               ),
             ),
@@ -257,6 +262,31 @@ class _PhotoPill extends StatelessWidget {
         Text(label, style: BT.mono(size: 10, color: BT.ink)),
       ]),
     ),
+  );
+}
+
+// ── Photo-backdrop sticker: Robinhood-style minimal ──────────────────────────
+// No card background, no border -- just typography floating on the photo,
+// relying on PhotoBackdropCard's own scrim for legibility (unlike Set's slab
+// or Collection's glass panel, which supply their own contrast). The Den has
+// no $ or ROI to headline, so the trophy count fills the same "one big
+// number" role instead.
+class _DenMinimalSticker extends StatelessWidget {
+  final int earnedCount;
+  const _DenMinimalSticker({required this.earnedCount});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('BRIKSTAX · MY DEN',
+          style: BT.mono(size: 9, color: Colors.white.withOpacity(.8))),
+      const SizedBox(height: 2),
+      Text('$earnedCount', style: BT.display(size: 44, color: BT.yellow)),
+      Text('TROPHIES EARNED',
+          style: BT.mono(size: 9, color: Colors.white.withOpacity(.75))),
+    ],
   );
 }
 

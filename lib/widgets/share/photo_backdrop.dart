@@ -88,17 +88,43 @@ Future<File?> pickBackdropPhoto(BuildContext context) async {
 /// Instagram/Snapchat Stories. Returns [card] unchanged when [photo] is
 /// null -- every share screen's existing plain-card look is the default;
 /// this only changes anything once the user opts into a photo backdrop.
+///
+/// [card] is capped at [maxStickerHeight] regardless of what's passed in --
+/// this is the actual fix for the original "sticker swallows the whole
+/// photo" bug (den_share_screen.dart's/set_share_screen.dart's/
+/// collection_share_screen.dart's own card widgets are still full-size
+/// when used standalone with no photo; only in this photo-backdrop path
+/// do they need to earn their keep as a small overlay instead).
+///
+/// [scrim] controls the bottom darkening gradient: on by default for
+/// stickers that are just floating typography with no background of their
+/// own (Den's Robinhood-style minimal sticker genuinely needs it for
+/// legibility against an arbitrary photo) -- turned off by screens whose
+/// sticker already supplies its own contrast (Set's opaque slab card,
+/// Collection's translucent-but-blurred glass panel), where stacking the
+/// scrim underneath just double-darkens for no benefit.
 class PhotoBackdropCard extends StatelessWidget {
   final File?  photo;
   final Widget card;
-  const PhotoBackdropCard({super.key, required this.photo, required this.card});
+  final bool   scrim;
+  const PhotoBackdropCard({
+    super.key,
+    required this.photo,
+    required this.card,
+    this.scrim = true,
+  });
 
   static const double canvasW = 540;
   static const double canvasH = 960; // 9:16 -- Instagram/Snapchat Story shape
+  static const double maxStickerHeight = canvasH * .34;
 
   @override
   Widget build(BuildContext context) {
     if (photo == null) return card;
+    final capped = ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: maxStickerHeight),
+      child: card,
+    );
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: SizedBox(
@@ -106,22 +132,26 @@ class PhotoBackdropCard extends StatelessWidget {
         height: canvasH,
         child: Stack(fit: StackFit.expand, children: [
           Image.file(photo!, fit: BoxFit.cover),
-          // Scrim so the card stays legible against an arbitrary photo,
-          // same idea as a Story sticker's own drop shadow/backing.
-          Positioned(
-            left: 0, right: 0, bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 60, 24, 44),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(.6)],
+          if (scrim)
+            // Full-bleed gradient so the sticker's own typography stays
+            // legible against an arbitrary photo, same idea as a Story
+            // sticker's own drop shadow/backing.
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 60, 24, 44),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black.withOpacity(.6)],
+                  ),
                 ),
+                child: Center(child: capped),
               ),
-              child: Center(child: card),
-            ),
-          ),
+            )
+          else
+            Positioned(left: 16, right: 16, bottom: 16, child: capped),
         ]),
       ),
     );
