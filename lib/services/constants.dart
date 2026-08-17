@@ -12,6 +12,15 @@ class K {
   // BrickSet (low-sensitivity, public API key)
   static const bsKey = '3-Dwg8-SY9s-4VdM8';
 
+  // Affiliate tags -- public, non-secret identifiers meant to appear
+  // directly in a URL (unlike an API key), same as an Amazon Associates
+  // tag or eBay Partner Network campaign id always is. Match the exact
+  // values the Cloudflare Worker uses for Discord-posted deals (see
+  // AMAZON_TAG/EBAY_CAMPAIGN_ID in cloudflare-worker/worker.js) so every
+  // BrikStax-sourced link, app or Discord, credits the same account.
+  static const amazonTag = 'brikstax-20';
+  static const ebayCampaignId = '5339171029';
+
   // Cloudflare Worker — handles BrickSet proxy AND eBay with D1 cache
   // eBay calls go to: POST ${workerUrl}ebay
   // BrickSet/proxy:   GET  ${workerUrl}?url=...

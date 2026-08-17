@@ -2,8 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/wishlist_item.dart';
 import '../providers/collection.dart';
+import '../services/affiliate_links.dart';
 import '../services/api.dart';
 import '../services/wishlist_service.dart';
 import '../theme/app_theme.dart';
@@ -242,12 +244,53 @@ class _State extends State<WishlistScreen> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 8),
+                _buyLinks(bt, w),
               ],
             )),
           ]),
         ),
       ),
     );
+  }
+
+  // Search links, not a specific listing -- there's no ASIN/eBay item id
+  // for an arbitrary set, just a set number + name. Both carry BrikStax's
+  // own affiliate tag (see services/affiliate_links.dart). Each chip is
+  // its own GestureDetector nested inside the card's (onTap: _showEdit) --
+  // Flutter's gesture arena resolves the tap to whichever recognizer is
+  // innermost, so tapping a chip opens the link instead of the edit sheet.
+  Widget _buyLinks(BrikStaxColors bt, WishlistItem w) => Row(children: [
+    Expanded(child: _buyChip(bt, 'Amazon', BT.orange,
+        () => _openBuyLink(amazonSearchUrl(w.num, w.name)))),
+    const SizedBox(width: 6),
+    Expanded(child: _buyChip(bt, 'eBay', BT.blue,
+        () => _openBuyLink(ebaySearchUrl(w.num, w.name)))),
+  ]);
+
+  Widget _buyChip(BrikStaxColors bt, String label, Color color, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: bt.surface2,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: bt.cardBorder, width: 1),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.open_in_new, size: 11, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: BT.mono(size: 10, weight: FontWeight.w700, color: color)),
+          ]),
+        ),
+      );
+
+  Future<void> _openBuyLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null && await canLaunchUrl(uri)) {
+      launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   // ── Add sheet ─────────────────────────────────────────────────────────────
