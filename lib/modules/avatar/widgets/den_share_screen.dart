@@ -38,6 +38,7 @@ class _State extends State<DenShareScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   DenShareMode _mode = DenShareMode.stats;
   File? _photo;
+  ShareFormat _format = ShareFormat.story;
   bool _sharing = false;
 
   Future<void> _pickPhoto() async {
@@ -166,22 +167,22 @@ class _State extends State<DenShareScreen> {
                 ),
               ],
             ]),
+            const SizedBox(height: 12),
+
+            FormatToggle(format: _format, onChanged: (f) => setState(() => _format = f)),
             const SizedBox(height: 16),
 
-            // Capturable card. FittedBox scales the 504px card down to fit the
-            // screen in the PREVIEW, but the RepaintBoundary still captures at
-            // full 504px resolution.
+            // Capturable card. FittedBox scales the card down to fit the
+            // screen in the PREVIEW, but the RepaintBoundary still captures
+            // at full resolution.
             FittedBox(
               fit: BoxFit.scaleDown,
               child: RepaintBoundary(
                 key: _boundaryKey,
-                child: PhotoBackdropCard(
-                  photo: _photo,
-                  // Robinhood-style: just floating typography, no card
-                  // background of its own -- genuinely needs the scrim
-                  // (PhotoBackdropCard's default) for legibility.
-                  card: _photo == null
-                      ? _ShareCard(
+                child: _photo == null
+                    ? FixedRatioCanvas(
+                        format: _format,
+                        card: _ShareCard(
                           state: state,
                           earned: earned,
                           top3: top3,
@@ -191,9 +192,16 @@ class _State extends State<DenShareScreen> {
                           sealed: col.sealedCount,
                           market: col.totalMarket,
                           byTheme: col.byTheme,
-                        )
-                      : _DenMinimalSticker(earnedCount: earned.length),
-                ),
+                        ),
+                      )
+                    : PhotoBackdropCard(
+                        photo: _photo,
+                        format: _format,
+                        // Robinhood-style: just floating typography, no card
+                        // background of its own -- genuinely needs the scrim
+                        // (PhotoBackdropCard's default) for legibility.
+                        card: _DenMinimalSticker(earnedCount: earned.length),
+                      ),
               ),
             ),
 

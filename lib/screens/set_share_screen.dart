@@ -30,6 +30,7 @@ class _State extends State<SetShareScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   bool _showDollars = false;
   File? _photo;
+  ShareFormat _format = ShareFormat.story;
   bool _sharing = false;
 
   Future<void> _pickPhoto() async {
@@ -132,19 +133,26 @@ class _State extends State<SetShareScreen> {
                 child: Text('Remove photo', style: BT.mono(size: 10, color: bt.tx3)),
               ),
             ],
+            const SizedBox(height: 12),
+
+            FormatToggle(format: _format, onChanged: (f) => setState(() => _format = f)),
             const SizedBox(height: 16),
 
             FittedBox(
               fit: BoxFit.scaleDown,
               child: RepaintBoundary(
                 key: _boundaryKey,
-                child: PhotoBackdropCard(
-                  photo: _photo,
-                  scrim: false, // the slab is opaque -- supplies its own contrast
-                  card: _photo == null
-                      ? _SetShareCard(set: s, showDollars: _showDollars)
-                      : _SlabSticker(set: s, showDollars: _showDollars),
-                ),
+                child: _photo == null
+                    ? FixedRatioCanvas(
+                        format: _format,
+                        card: _SetShareCard(set: s, showDollars: _showDollars),
+                      )
+                    : PhotoBackdropCard(
+                        photo: _photo,
+                        format: _format,
+                        scrim: false, // the slab is opaque -- supplies its own contrast
+                        card: _SlabSticker(set: s, showDollars: _showDollars),
+                      ),
               ),
             ),
 

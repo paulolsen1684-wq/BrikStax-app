@@ -81,6 +81,7 @@ class _State extends State<CollectionShareScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   bool _showDollars = false;
   File? _photo;
+  ShareFormat _format = ShareFormat.story;
   bool _sharing = false;
 
   Future<void> _pickPhoto() async {
@@ -186,19 +187,26 @@ class _State extends State<CollectionShareScreen> {
                 child: Text('Remove photo', style: BT.mono(size: 10, color: bt.tx3)),
               ),
             ],
+            const SizedBox(height: 12),
+
+            FormatToggle(format: _format, onChanged: (f) => setState(() => _format = f)),
             const SizedBox(height: 16),
 
             FittedBox(
               fit: BoxFit.scaleDown,
               child: RepaintBoundary(
                 key: _boundaryKey,
-                child: PhotoBackdropCard(
-                  photo: _photo,
-                  scrim: false, // the glass panel supplies its own contrast via blur
-                  card: _photo == null
-                      ? _CollectionShareCard(scope: scope, showDollars: _showDollars)
-                      : _GlassSticker(scope: scope, showDollars: _showDollars),
-                ),
+                child: _photo == null
+                    ? FixedRatioCanvas(
+                        format: _format,
+                        card: _CollectionShareCard(scope: scope, showDollars: _showDollars),
+                      )
+                    : PhotoBackdropCard(
+                        photo: _photo,
+                        format: _format,
+                        scrim: false, // the glass panel supplies its own contrast via blur
+                        card: _GlassSticker(scope: scope, showDollars: _showDollars),
+                      ),
               ),
             ),
 
