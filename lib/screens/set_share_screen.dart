@@ -128,10 +128,14 @@ class _State extends State<SetShareScreen> {
         );
       case _Variant.classicPhoto:
         if (_photo == null) {
+          // Distinct copy + a light-card preview tint -- this and
+          // productPhoto's placeholder used to be pixel-identical (same
+          // icon, same text), which read as "swiping does nothing" when no
+          // photo had been picked yet. Real bug, found via user testing.
           return _CanvasPrompt(
             format: _format,
             icon: Icons.add_a_photo_outlined,
-            message: 'Add your own photo\nfor this card',
+            message: 'Add your own photo\nfor the Classic card',
             onTap: _pickPhoto,
           );
         }
@@ -147,6 +151,7 @@ class _State extends State<SetShareScreen> {
             format: _format,
             icon: Icons.image_not_supported_outlined,
             message: 'No product photo\navailable for this set',
+            dark: true,
           );
         }
         return _ProductPhotoCard(set: s, showDollars: _showDollars, format: _format);
@@ -155,8 +160,9 @@ class _State extends State<SetShareScreen> {
           return _CanvasPrompt(
             format: _format,
             icon: Icons.add_a_photo_outlined,
-            message: 'Add your own photo\nfor this card',
+            message: 'Add your own photo\nfor the Product Photo card',
             onTap: _pickPhoto,
+            dark: true, // previews the dark card style it leads to
           );
         }
         return _ProductPhotoCard(
@@ -373,15 +379,29 @@ class _CanvasPrompt extends StatelessWidget {
   final IconData icon;
   final String message;
   final VoidCallback? onTap;
+  // Real bug fix 2026-08-18: classicPhoto's and productPhoto's placeholder
+  // used to be pixel-identical (same icon/text/colors) until a photo was
+  // picked -- confirmed via user testing that swiping between them looked
+  // like nothing was happening, even though the page position genuinely
+  // was changing. [dark] previews the dark Product Photo panel style so
+  // the two "add a photo" prompts are never visually indistinguishable.
+  final bool dark;
   const _CanvasPrompt({
     required this.format,
     required this.icon,
     required this.message,
     this.onTap,
+    this.dark = false,
   });
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) {
+    final bg     = dark ? _ProductPhotoCard._panelBg : BT.cream;
+    final fg     = dark ? Colors.white : BT.ink;
+    final circle = dark ? _ProductPhotoCard._panelBg : BT.white;
+    final sub    = dark ? _ProductPhotoCard._txDim : BT.tx3;
+
+    return GestureDetector(
     onTap: onTap,
     child: Container(
       width: format.width,
@@ -393,30 +413,31 @@ class _CanvasPrompt extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: StudBackground(
-        color: BT.cream,
+        color: bg,
         child: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
               width: 64, height: 64,
               decoration: BoxDecoration(
-                color: BT.white,
+                color: circle,
                 shape: BoxShape.circle,
-                border: Border.all(color: BT.ink, width: BT.bw),
-                boxShadow: BT.shadowSm,
+                border: Border.all(color: dark ? Colors.white24 : BT.ink, width: BT.bw),
+                boxShadow: dark ? null : BT.shadowSm,
               ),
-              child: Icon(icon, size: 28, color: BT.ink),
+              child: Icon(icon, size: 28, color: fg),
             ),
             const SizedBox(height: 14),
-            Text(message, style: BT.body(size: 14, color: BT.ink), textAlign: TextAlign.center),
+            Text(message, style: BT.body(size: 14, color: fg), textAlign: TextAlign.center),
             if (onTap != null) ...[
               const SizedBox(height: 6),
-              Text('Tap to continue', style: BT.mono(size: 10, color: BT.tx3)),
+              Text('Tap to continue', style: BT.mono(size: 10, color: sub)),
             ],
           ]),
         ),
       ),
     ),
   );
+  }
 }
 
 // ── The composed share card (fixed BT.* colors -- always looks the same
