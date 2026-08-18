@@ -297,10 +297,26 @@ class _State extends State<WishlistScreen> {
         ),
       );
 
+  // Real user feedback 2026-08-18: opening in a browser instead of the
+  // native app (Amazon especially -- its own app is inconsistent about
+  // claiming search-page deep links, only reliably claiming product pages,
+  // which this app can't build without an ASIN) reads as unwanted extra
+  // friction, not a fair tradeoff. externalNonBrowserApplication tells
+  // Android to prefer a non-browser handler when one exists -- but unlike
+  // externalApplication, it can fail to open ANYTHING if no such handler
+  // claims the URL, so it's tried first with the old, always-reliable
+  // browser-capable mode as an automatic fallback if that happens. A tap
+  // should never end up doing nothing.
   Future<void> _openBuyLink(String url) async {
     final uri = Uri.tryParse(url);
-    if (uri != null && await canLaunchUrl(uri)) {
-      launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (uri == null || !await canLaunchUrl(uri)) return;
+    bool openedApp = false;
+    try {
+      openedApp = await launchUrl(
+          uri, mode: LaunchMode.externalNonBrowserApplication);
+    } catch (_) {}
+    if (!openedApp) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
