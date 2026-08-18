@@ -42,6 +42,10 @@ dependencies:
 
   home_widget: ^0.6.0
   image_cropper: ^8.0.2
+  # Renders the "Scan to view in BrikStax" QR code on the Set share card's
+  # Product Photo style -- encodes a brikstax://set/<num> deep link
+  # (deep_link_service.dart already handles this scheme).
+  qr_flutter: ^4.1.0
   sentry_flutter: ^9.25.0
   package_info_plus: ^9.0.1
   app_links: ^7.2.1

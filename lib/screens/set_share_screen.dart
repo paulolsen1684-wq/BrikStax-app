@@ -8,17 +8,29 @@
 // capture pattern den_share_screen.dart already established, plus the
 // optional photo-backdrop step shared with it and collection_share_screen.dart
 // via widgets/share/photo_backdrop.dart.
+//
+// Three photo sources, added 2026-08-17 (_PhotoSource): none (the plain
+// card on FixedRatioCanvas), mine (user-uploaded photo, the original
+// PhotoBackdropCard/_SlabSticker sticker flow), and product (the set's own
+// official product photo as full-bleed hero art -- no upload needed, works
+// even with no photo of your own). "Product" was designed against a
+// user-provided reference mockup and includes a real QR code
+// (brikstax://set/<num>, handled by deep_link_service.dart) rather than
+// a static logo, confirmed with the user before building.
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/lego_set.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/share/photo_backdrop.dart';
 import '../widgets/share/brand_mark.dart';
+
+enum _PhotoSource { none, mine, product }
 
 class SetShareScreen extends StatefulWidget {
   final LegoSet set;
@@ -30,12 +42,13 @@ class _State extends State<SetShareScreen> {
   final GlobalKey _boundaryKey = GlobalKey();
   bool _showDollars = false;
   File? _photo;
+  _PhotoSource _source = _PhotoSource.none;
   ShareFormat _format = ShareFormat.story;
   bool _sharing = false;
 
   Future<void> _pickPhoto() async {
     final photo = await pickBackdropPhoto(context);
-    if (photo != null) setState(() => _photo = photo);
+    if (photo != null) setState(() { _photo = photo; _source = _PhotoSource.mine; });
   }
 
   Future<void> _share() async {
@@ -112,25 +125,37 @@ class _State extends State<SetShareScreen> {
         Expanded(child: SingleChildScrollView(
           padding: const EdgeInsets.all(18),
           child: Column(children: [
-            // Privacy + photo controls
-            Row(children: [
-              Expanded(child: _PillToggle(
-                icon: _showDollars ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                label: _showDollars ? 'Hide \$ amounts' : 'Show \$ amounts',
-                onTap: () => setState(() => _showDollars = !_showDollars),
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: _PillToggle(
-                icon: _photo == null ? Icons.add_a_photo_outlined : Icons.sync_outlined,
-                label: _photo == null ? 'Add a photo' : 'Change photo',
-                onTap: _pickPhoto,
-              )),
-            ]),
-            if (_photo != null) ...[
-              const SizedBox(height: 8),
+            // Privacy toggle
+            _PillToggle(
+              icon: _showDollars ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+              label: _showDollars ? 'Hide \$ amounts' : 'Show \$ amounts',
+              onTap: () => setState(() => _showDollars = !_showDollars),
+            ),
+            const SizedBox(height: 8),
+
+            // Backdrop source -- no photo (plain card), your own upload, or
+            // the set's real product photo as automatic hero art. Product
+            // is disabled when the set has no image on file (nothing to
+            // show), rather than silently falling back to something else.
+            _SourceToggle(
+              source: _source,
+              hasProductImage: s.imageUrl != null,
+              onChanged: (src) async {
+                // Only launches the picker the first time -- once a photo's
+                // already been picked, re-selecting "Mine" just switches
+                // back to showing it rather than forcing a fresh pick.
+                if (src == _PhotoSource.mine && _photo == null) {
+                  await _pickPhoto();
+                } else {
+                  setState(() => _source = src);
+                }
+              },
+            ),
+            if (_source == _PhotoSource.mine) ...[
+              const SizedBox(height: 6),
               GestureDetector(
-                onTap: () => setState(() => _photo = null),
-                child: Text('Remove photo', style: BT.mono(size: 10, color: bt.tx3)),
+                onTap: _pickPhoto,
+                child: Text('Change photo', style: BT.mono(size: 10, color: bt.tx3)),
               ),
             ],
             const SizedBox(height: 12),
@@ -142,17 +167,21 @@ class _State extends State<SetShareScreen> {
               fit: BoxFit.scaleDown,
               child: RepaintBoundary(
                 key: _boundaryKey,
-                child: _photo == null
-                    ? FixedRatioCanvas(
-                        format: _format,
-                        card: _SetShareCard(set: s, showDollars: _showDollars),
-                      )
-                    : PhotoBackdropCard(
-                        photo: _photo,
-                        format: _format,
-                        scrim: false, // the slab is opaque -- supplies its own contrast
-                        card: _SlabSticker(set: s, showDollars: _showDollars),
-                      ),
+                child: switch (_source) {
+                  _PhotoSource.none => FixedRatioCanvas(
+                      format: _format,
+                      card: _SetShareCard(set: s, showDollars: _showDollars),
+                    ),
+                  _PhotoSource.mine => PhotoBackdropCard(
+                      photo: _photo,
+                      format: _format,
+                      scrim: false, // the slab is opaque -- supplies its own contrast
+                      card: _SlabSticker(set: s, showDollars: _showDollars),
+                    ),
+                  _PhotoSource.product => _ProductPhotoCard(
+                      set: s, showDollars: _showDollars, format: _format,
+                    ),
+                },
               ),
             ),
 
@@ -221,6 +250,50 @@ class _PillToggle extends StatelessWidget {
         ]),
       ),
     );
+  }
+}
+
+// ── Backdrop source: none / mine / product ────────────────────────────────
+class _SourceToggle extends StatelessWidget {
+  final _PhotoSource source;
+  final bool hasProductImage;
+  final ValueChanged<_PhotoSource> onChanged;
+  const _SourceToggle({
+    required this.source,
+    required this.hasProductImage,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bt = context.bt;
+    Widget seg(_PhotoSource s, String label, {bool enabled = true}) {
+      final on = source == s;
+      return Expanded(child: GestureDetector(
+        onTap: enabled ? () => onChanged(s) : null,
+        child: Opacity(
+          opacity: enabled ? 1 : .4,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            decoration: BoxDecoration(
+              color: on ? BT.yellow : bt.cardBg,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: on ? BT.ink : bt.cardBorder, width: BT.bw),
+              boxShadow: on ? null : [BoxShadow(color: bt.shadowColor, offset: const Offset(2, 2))],
+            ),
+            child: Text(label, textAlign: TextAlign.center,
+                style: BT.mono(size: 10, color: on ? BT.ink : bt.tx)),
+          ),
+        ),
+      ));
+    }
+    return Row(children: [
+      seg(_PhotoSource.none, 'No photo'),
+      const SizedBox(width: 8),
+      seg(_PhotoSource.mine, 'My photo'),
+      const SizedBox(width: 8),
+      seg(_PhotoSource.product, 'Product photo', enabled: hasProductImage),
+    ]);
   }
 }
 
@@ -436,4 +509,160 @@ class _SlabSticker extends StatelessWidget {
       ]),
     );
   }
+}
+
+// ── Product Photo card ────────────────────────────────────────────────────────
+// Uses the set's own official product image (from Rebrickable/BrickSet,
+// already fetched into set.imageUrl for every set) as full-bleed hero art --
+// no upload required, works even for a user with no photo of their own.
+// Designed against a user-provided reference mockup: photo up top with a
+// status pill and the logo mark overlaid, a solid info card below with a
+// real "scan to view in BrikStax" QR code (brikstax://set/<num>, handled by
+// deep_link_service.dart) rather than a static graphic.
+//
+// Unlike PhotoBackdropCard's stickers (a small capped-height overlay meant
+// to leave most of an arbitrary personal photo visible), this card is the
+// dominant visual on purpose -- the "photo" here is curated product
+// photography, not a personal snapshot, so there's no "don't cover it up"
+// concern to design around. Built as its own Column (photo Expanded, card
+// content fixed) rather than reusing PhotoBackdropCard's Stack+scrim
+// approach, since the proportions and layout are fundamentally different.
+class _ProductPhotoCard extends StatelessWidget {
+  final LegoSet set;
+  final bool showDollars;
+  final ShareFormat format;
+  const _ProductPhotoCard({required this.set, required this.showDollars, required this.format});
+
+  static String _fmt(double v) {
+    if (v.abs() >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
+    return v.toStringAsFixed(0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roi = set.roi;
+    final deepLink = 'brikstax://set/${set.num}';
+
+    return Container(
+      width: format.width,
+      height: format.height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: BT.ink, width: BT.bw),
+        boxShadow: BT.shadow,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: [
+        // ── Hero photo ────────────────────────────────────────────────
+        Expanded(
+          child: Stack(fit: StackFit.expand, children: [
+            set.imageUrl != null
+                ? CachedNetworkImage(imageUrl: set.imageUrl!, fit: BoxFit.cover)
+                : Container(color: BT.cream2),
+            // Subtle top scrim so the pill/mark stay legible regardless
+            // of how bright the product photo itself is.
+            Positioned(
+              top: 0, left: 0, right: 0, height: 90,
+              child: DecoratedBox(decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [Colors.black.withOpacity(.45), Colors.transparent],
+                ),
+              )),
+            ),
+            Positioned(
+              top: 14, left: 14,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(.55),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(_statusLabel(set), style: BT.mono(size: 9, color: Colors.white)),
+              ),
+            ),
+            const Positioned(top: 14, right: 14, child: BrikStaxMark(size: 26)),
+          ]),
+        ),
+
+        // ── Info card ─────────────────────────────────────────────────
+        Container(
+          width: double.infinity,
+          color: BT.cream,
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(set.name, style: BT.display(size: 22, color: BT.ink),
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text('${set.theme ?? "LEGO"} · #${set.num}',
+                style: BT.mono(size: 11, color: BT.tx3)),
+            const SizedBox(height: 10),
+
+            if (roi != null)
+              Text('${roi >= 0 ? '▲' : '▼'} ${roi.abs().toStringAsFixed(1)}% ROI',
+                  style: BT.display(size: 26, color: roi >= 0 ? BT.green : BT.red))
+            else
+              Text('No pricing data yet', style: BT.mono(size: 11, color: BT.tx3)),
+            const SizedBox(height: 10),
+
+            Container(
+              decoration: BoxDecoration(
+                color: BT.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: BT.ink, width: 1.5),
+              ),
+              child: Row(children: [
+                _statCell(showDollars && set.ebayAvg != null
+                    ? '\$${_fmt(set.ebayAvg!)}' : (set.ebayAvg != null ? '🔒' : '—'),
+                    'CURRENT VALUE'),
+                Container(width: 1.5, height: 38, color: BT.ink),
+                _statCell(set.pieces?.toString() ?? '—', 'PIECES'),
+              ]),
+            ),
+            const SizedBox(height: 12),
+
+            Row(children: [
+              const BrikStaxMark(size: 22),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Scan to view in BrikStax',
+                  style: BT.mono(size: 9, color: BT.tx3))),
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: BT.white,
+                  border: Border.all(color: BT.ink, width: 1.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: QrImageView(
+                  data: deepLink,
+                  version: QrVersions.auto,
+                  size: 40,
+                  backgroundColor: BT.white,
+                  eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: BT.ink),
+                  dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square, color: BT.ink),
+                ),
+              ),
+            ]),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  static String _statusLabel(LegoSet s) {
+    if (s.retired) return s.inRetirementWindow ? 'RETIRED · PRICE CLIMBING' : 'RETIRED';
+    return s.status == 'sealed' ? 'ACTIVE · SEALED' : 'ACTIVE · OPEN';
+  }
+
+  Widget _statCell(String value, String label) => Expanded(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+      child: Column(children: [
+        Text(value, style: BT.display(size: 16, color: BT.ink),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 1),
+        Text(label, style: BT.mono(size: 7.5, color: BT.tx3)),
+      ]),
+    ),
+  );
 }
