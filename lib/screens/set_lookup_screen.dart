@@ -33,7 +33,7 @@ class _State extends State<SetLookupScreen> {
   bool _looking = false;
   String? _error;
   Map<String, dynamic>? _rb;                 // Rebrickable: name/pieces/year/theme/image
-  ({double? retail, DateTime? exitDate})? _bs; // BrickSet: retail + retirement
+  ({double? retail, DateTime? exitDate, int? minifigs})? _bs; // BrickSet: retail + retirement + minifigs
 
   // eBay loads separately and slower than the above two, so the rest of the
   // breakdown can render immediately instead of waiting on it -- matches

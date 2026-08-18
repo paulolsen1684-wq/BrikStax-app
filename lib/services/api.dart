@@ -231,12 +231,15 @@ class Api {
     return details?.retail;
   }
 
-  /// Retail price + retirement date in one BrickSet call. exitDate comes
-  /// straight from BrickSet's own `exitDate` field -- verified against
-  /// several known-retired sets to confirm it's a real past date once a set
-  /// has actually retired (often just Dec 31 of the retirement year, not a
-  /// precise day, but that's plenty precise for month-level tracking).
-  Future<({double? retail, DateTime? exitDate})?> fetchSetDetails(String num) async {
+  /// Retail price + retirement date + minifig count in one BrickSet call.
+  /// exitDate comes straight from BrickSet's own `exitDate` field --
+  /// verified against several known-retired sets to confirm it's a real
+  /// past date once a set has actually retired (often just Dec 31 of the
+  /// retirement year, not a precise day, but that's plenty precise for
+  /// month-level tracking). `minifigs` (added 2026-08-18, confirmed live
+  /// against a real getSets response) is a plain integer BrickSet already
+  /// returns on every call this method already makes -- no extra request.
+  Future<({double? retail, DateTime? exitDate, int? minifigs})?> fetchSetDetails(String num) async {
     final clean  = num.replaceAll(RegExp(r'-\d+$'), '');
     final params = jsonEncode({'setNumber': '$clean-1', 'pageSize': 1});
     final url    = Uri.parse(
@@ -270,8 +273,16 @@ class Api {
       final exitRaw = set0['exitDate'] as String?;
       if (exitRaw != null) exitDate = DateTime.tryParse(exitRaw);
 
-      if (retail == null && exitDate == null) return null;
-      return (retail: retail, exitDate: exitDate);
+      // Not `as num?` -- this method's own `num` parameter shadows the
+      // built-in num type here, so the cast would resolve to the wrong
+      // thing. int.tryParse's toString() round-trip sidesteps that.
+      final minifigsRaw = set0['minifigs'];
+      final minifigs = minifigsRaw is int
+          ? minifigsRaw
+          : int.tryParse('$minifigsRaw');
+
+      if (retail == null && exitDate == null && minifigs == null) return null;
+      return (retail: retail, exitDate: exitDate, minifigs: minifigs);
     } catch (_) {
       return null;
     }

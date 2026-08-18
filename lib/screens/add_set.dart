@@ -41,6 +41,7 @@ class _State extends State<AddSetScreen> {
   bool           _looking = false;
   Map<String, dynamic>? _rb;
   DateTime?      _exitDate;
+  int?           _minifigs;
 
   @override
   void initState() {
@@ -106,6 +107,7 @@ class _State extends State<AddSetScreen> {
         setState(() => _cRet.text = details.retail!.toStringAsFixed(2));
       }
       _exitDate = details.exitDate;
+      _minifigs = details.minifigs;
     } catch (_) {}
   }
 
@@ -127,6 +129,7 @@ class _State extends State<AddSetScreen> {
       subtheme:       _rb?['subtheme_name'] as String?,
       retired:        _rb?['is_obsolete'] as bool? ?? false,
       exitDate:       _exitDate,
+      minifigs:       _minifigs,
       openExtras:     _extras,
       purchaseSource: _source,
       verified:       widget.fromScan ? true : null,

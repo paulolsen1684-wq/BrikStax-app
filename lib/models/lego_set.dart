@@ -208,6 +208,10 @@ class LegoSet {
   // BrickSet has), but plenty precise for month-level tracking. Null means
   // never fetched, not "not retired" -- check `retired` for that.
   final DateTime? exitDate;
+  // From BrickSet's own minifigs field (a plain count), fetched alongside
+  // exitDate/retail via the same Api.fetchSetDetails call -- null means
+  // never fetched, not "no minifigs."
+  final int? minifigs;
 
 
   // Collection state
@@ -251,6 +255,7 @@ class LegoSet {
     this.retired      = false,
     this.verified     = true,
     this.exitDate,
+    this.minifigs,
     this.status       = 'sealed',
     this.qty          = 1,
     this.openExtras   = const OpenExtras(),
@@ -378,6 +383,7 @@ class LegoSet {
       exitDate:             j['exitDate'] != null
           ? DateTime.fromMillisecondsSinceEpoch(j['exitDate'] as int)
           : null,
+      minifigs:             j['minifigs'] as int?,
       status:               j['status']  as String? ?? 'sealed',
       qty:                  j['qty']     as int? ?? 1,
       openExtras:           j['extras'] != null
@@ -415,6 +421,7 @@ class LegoSet {
     'retired':    retired,
     'verified':   verified,
     'exitDate':   exitDate?.millisecondsSinceEpoch,
+    'minifigs':   minifigs,
     'status':     status,
     'qty':        qty,
     'extras':     openExtras.toJson(),
@@ -443,6 +450,7 @@ class LegoSet {
     bool?           retired,
     bool?           verified,
     DateTime?       exitDate,
+    int?            minifigs,
     String?         status,
     int?            qty,
     OpenExtras?     openExtras,
@@ -470,6 +478,7 @@ class LegoSet {
     retired:              retired           ?? this.retired,
     verified:             verified          ?? this.verified,
     exitDate:             exitDate          ?? this.exitDate,
+    minifigs:             minifigs          ?? this.minifigs,
     status:               status            ?? this.status,
     qty:                  qty               ?? this.qty,
     openExtras:           openExtras        ?? this.openExtras,

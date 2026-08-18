@@ -106,6 +106,7 @@ class CollectionProvider extends ChangeNotifier {
     String?          subtheme,
     bool             retired         = false,
     DateTime?        exitDate,
+    int?             minifigs,
     OpenExtras       openExtras      = const OpenExtras(),
     PurchaseSource   purchaseSource  = PurchaseSource.other,
     double?          insiderPointsOverride,
@@ -142,6 +143,7 @@ class CollectionProvider extends ChangeNotifier {
       subtheme:             subtheme,
       retired:              retired,
       exitDate:             exitDate,
+      minifigs:             minifigs,
       openExtras:           openExtras,
       purchaseSource:       purchaseSource,
       insiderPointsOverride:insiderPointsOverride,
@@ -206,21 +208,24 @@ class CollectionProvider extends ChangeNotifier {
     return ok;
   }
 
-  // ── Fill missing retail (and retirement date, same BrickSet call) ─────────
+  // ── Fill missing retail (retirement date + minifigs, same BrickSet call) ──
   Future<int> fillRetail({void Function(int done, int total)? onProgress}) async {
     final missing = _sets
-        .where((s) => s.retail == null || (s.retired && s.exitDate == null))
+        .where((s) => s.retail == null || (s.retired && s.exitDate == null)
+            || s.minifigs == null)
         .toList();
     int ok = 0;
     for (int i = 0; i < missing.length; i++) {
       onProgress?.call(i, missing.length);
       final details = await _api.fetchSetDetails(missing[i].num);
-      if (details != null && (details.retail != null || details.exitDate != null)) {
+      if (details != null &&
+          (details.retail != null || details.exitDate != null || details.minifigs != null)) {
         final idx = _sets.indexWhere((s) => s.id == missing[i].id);
         if (idx >= 0) {
           _sets[idx] = _sets[idx].copyWith(
             retail: details.retail,
             exitDate: details.exitDate,
+            minifigs: details.minifigs,
           );
           await _storage.save(_sets[idx]);
           ok++;

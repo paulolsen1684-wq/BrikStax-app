@@ -766,13 +766,19 @@ class _ProductPhotoCard extends StatelessWidget {
 
               // Stacked label:value list -- matches the density of the
               // reference's own example (Entry Price / Current Value /
-              // Status), not the thin 2-cell row v2 shipped with.
+              // Status), not the thin 2-cell row v2 shipped with. Minifigs
+              // (set.minifigs, BrickSet's own field, verified live 2026-08-18)
+              // added per explicit request, same extend-the-list treatment
+              // as the other rows -- "Owned By" (BrickSet's community
+              // ownership count) was considered but deliberately left out.
               if (set.paid != null)
                 _statRow('Entry Price',
                     showDollars ? '\$${_fmt(set.paid!)}' : '🔒', muted: true),
               _statRow('Current Value', showDollars && set.ebayAvg != null
                   ? '\$${_fmt(set.ebayAvg!)}' : (set.ebayAvg != null ? '🔒' : '—')),
               _statRow('Status', _statusRowText(set), muted: true),
+              if (set.minifigs != null)
+                _statRow('Minifigs', '${set.minifigs}', muted: true),
 
               const Spacer(),
 
