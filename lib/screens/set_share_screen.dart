@@ -9,15 +9,17 @@
 // optional photo-backdrop step shared with it and collection_share_screen.dart
 // via widgets/share/photo_backdrop.dart.
 //
-// Two card styles, added 2026-08-17 (_CardStyle), chosen via a slider at
-// the top: Classic (the original card -- FixedRatioCanvas/_SetShareCard
-// with no photo, or PhotoBackdropCard/_SlabSticker over a user-uploaded
-// photo, unchanged) and Product Photo (_ProductPhotoCard -- a dark,
-// editorial "trading card" look built against a user-provided reference
-// image: the set's own official photo as full-bleed hero art, no upload
-// needed, plus a real QR code -- brikstax://set/<num>, handled by
-// deep_link_service.dart -- rather than a static logo). Both stay
-// available rather than one replacing the other, per explicit request.
+// Four card variants, swiped between Instagram-Stories-style rather than
+// picked via a button toggle (per explicit request): Classic (no photo),
+// Classic + your photo, Product Photo (the set's own official image),
+// Product Photo + your photo -- one continuous horizontal PageView, style
+// and photo source no longer separate controls. A single _photo (once
+// picked) is shared by both "+ your photo" variants. Product Photo
+// (_ProductPhotoCard) is a dark, editorial "trading card" look built
+// against a user-provided reference image, matched field-by-field after
+// two earlier misses (wrong palette, then missing stats) -- see CLAUDE.md
+// for that history. Real QR code (brikstax://set/<num>, handled by
+// deep_link_service.dart) on both Product Photo variants, not a static logo.
 
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -32,7 +34,16 @@ import '../theme/app_themes.dart';
 import '../widgets/share/photo_backdrop.dart';
 import '../widgets/share/brand_mark.dart';
 
-enum _CardStyle { classic, product }
+enum _Variant { classicPlain, classicPhoto, productOfficial, productPhoto }
+
+const _variants = [
+  _Variant.classicPlain, _Variant.classicPhoto,
+  _Variant.productOfficial, _Variant.productPhoto,
+];
+const _variantLabels = [
+  'Classic', 'Classic — Your Photo',
+  'Product Photo', 'Product Photo — Your Photo',
+];
 
 class SetShareScreen extends StatefulWidget {
   final LegoSet set;
@@ -41,23 +52,46 @@ class SetShareScreen extends StatefulWidget {
 }
 
 class _State extends State<SetShareScreen> {
-  final GlobalKey _boundaryKey = GlobalKey();
+  final PageController _pageCtrl = PageController();
+  final List<GlobalKey> _boundaryKeys = List.generate(4, (_) => GlobalKey());
+  int _pageIndex = 0;
   bool _showDollars = false;
   File? _photo;
-  _CardStyle _style = _CardStyle.classic;
   ShareFormat _format = ShareFormat.story;
   bool _sharing = false;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickPhoto() async {
     final photo = await pickBackdropPhoto(context);
     if (photo != null) setState(() => _photo = photo);
   }
 
+  // The two "+ Your Photo" variants need _photo before there's anything to
+  // capture -- the action button becomes "Add a photo" instead of "Share"
+  // on those pages until one's picked, rather than exporting a blank prompt.
+  bool get _currentNeedsPhoto {
+    final v = _variants[_pageIndex];
+    return (v == _Variant.classicPhoto || v == _Variant.productPhoto) && _photo == null;
+  }
+
+  Future<void> _onActionTap() async {
+    if (_currentNeedsPhoto) {
+      await _pickPhoto();
+      return;
+    }
+    await _share();
+  }
+
   Future<void> _share() async {
     setState(() => _sharing = true);
     bool ok = false;
     try {
-      final ro = _boundaryKey.currentContext?.findRenderObject();
+      final ro = _boundaryKeys[_pageIndex].currentContext?.findRenderObject();
       if (ro is RenderRepaintBoundary) {
         if (ro.debugNeedsPaint) {
           await Future.delayed(const Duration(milliseconds: 40));
@@ -82,6 +116,52 @@ class _State extends State<SetShareScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Couldn\'t create the image — try again'),
       ));
+    }
+  }
+
+  Widget _buildPage(int i, LegoSet s) {
+    switch (_variants[i]) {
+      case _Variant.classicPlain:
+        return FixedRatioCanvas(
+          format: _format,
+          card: _SetShareCard(set: s, showDollars: _showDollars),
+        );
+      case _Variant.classicPhoto:
+        if (_photo == null) {
+          return _CanvasPrompt(
+            format: _format,
+            icon: Icons.add_a_photo_outlined,
+            message: 'Add your own photo\nfor this card',
+            onTap: _pickPhoto,
+          );
+        }
+        return PhotoBackdropCard(
+          photo: _photo,
+          format: _format,
+          scrim: false, // the slab is opaque -- supplies its own contrast
+          card: _SlabSticker(set: s, showDollars: _showDollars),
+        );
+      case _Variant.productOfficial:
+        if (s.imageUrl == null) {
+          return _CanvasPrompt(
+            format: _format,
+            icon: Icons.image_not_supported_outlined,
+            message: 'No product photo\navailable for this set',
+          );
+        }
+        return _ProductPhotoCard(set: s, showDollars: _showDollars, format: _format);
+      case _Variant.productPhoto:
+        if (_photo == null) {
+          return _CanvasPrompt(
+            format: _format,
+            icon: Icons.add_a_photo_outlined,
+            message: 'Add your own photo\nfor this card',
+            onTap: _pickPhoto,
+          );
+        }
+        return _ProductPhotoCard(
+          set: s, showDollars: _showDollars, format: _format, heroPhoto: _photo,
+        );
     }
   }
 
@@ -124,84 +204,77 @@ class _State extends State<SetShareScreen> {
           ),
         ),
 
-        Expanded(child: SingleChildScrollView(
-          padding: const EdgeInsets.all(18),
-          child: Column(children: [
-            // Which card look -- Classic (the original app-styled card) or
-            // Product Photo (dark editorial card using the set's own real
-            // photo). Slider at the very top since it changes everything
-            // below it, per explicit request to keep both looks available.
-            _StyleSlider(
-              style: _style,
-              hasProductImage: s.imageUrl != null,
-              onChanged: (v) => setState(() => _style = v),
+        const SizedBox(height: 14),
+        // Instagram-Stories-style page dots -- also tappable to jump
+        // straight to a variant instead of swiping through every one.
+        _PageDots(
+          count: 4, index: _pageIndex,
+          onTap: (i) => _pageCtrl.animateToPage(i,
+              duration: const Duration(milliseconds: 260), curve: Curves.easeOut),
+        ),
+        const SizedBox(height: 6),
+        Text(_variantLabels[_pageIndex], style: BT.mono(size: 10, color: bt.tx3)),
+        if (_photo != null) ...[
+          const SizedBox(height: 4),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            GestureDetector(
+              onTap: _pickPhoto,
+              child: Text('Change photo', style: BT.mono(size: 9.5, color: bt.tx3)),
             ),
-            const SizedBox(height: 12),
+            Text('  ·  ', style: BT.mono(size: 9.5, color: bt.tx3)),
+            GestureDetector(
+              onTap: () => setState(() => _photo = null),
+              child: Text('Remove photo', style: BT.mono(size: 9.5, color: bt.tx3)),
+            ),
+          ]),
+        ],
 
-            // Privacy toggle
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+          child: Column(children: [
             _PillToggle(
               icon: _showDollars ? Icons.visibility_off_outlined : Icons.visibility_outlined,
               label: _showDollars ? 'Hide \$ amounts' : 'Show \$ amounts',
               onTap: () => setState(() => _showDollars = !_showDollars),
             ),
-
-            // "Add a photo" only applies to Classic -- Product Photo always
-            // uses the set's own real photo automatically, no upload needed.
-            if (_style == _CardStyle.classic) ...[
-              const SizedBox(height: 8),
-              _PillToggle(
-                icon: _photo == null ? Icons.add_a_photo_outlined : Icons.sync_outlined,
-                label: _photo == null ? 'Add a photo' : 'Change photo',
-                onTap: _pickPhoto,
-              ),
-              if (_photo != null) ...[
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: () => setState(() => _photo = null),
-                  child: Text('Remove photo', style: BT.mono(size: 10, color: bt.tx3)),
-                ),
-              ],
-            ],
-            const SizedBox(height: 12),
-
+            const SizedBox(height: 8),
             FormatToggle(format: _format, onChanged: (f) => setState(() => _format = f)),
-            const SizedBox(height: 16),
+          ]),
+        ),
 
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: RepaintBoundary(
-                key: _boundaryKey,
-                child: switch (_style) {
-                  _CardStyle.classic => _photo == null
-                      ? FixedRatioCanvas(
-                          format: _format,
-                          card: _SetShareCard(set: s, showDollars: _showDollars),
-                        )
-                      : PhotoBackdropCard(
-                          photo: _photo,
-                          format: _format,
-                          scrim: false, // the slab is opaque -- supplies its own contrast
-                          card: _SlabSticker(set: s, showDollars: _showDollars),
-                        ),
-                  _CardStyle.product => _ProductPhotoCard(
-                      set: s, showDollars: _showDollars, format: _format,
-                    ),
-                },
+        // ── Swipeable card preview -- Instagram-Stories-style horizontal
+        //    paging through the 4 variants. Each page keeps its own
+        //    RepaintBoundary/key so _share() can capture whichever one is
+        //    currently on screen without needing all 4 rendered at once.
+        Expanded(
+          child: PageView.builder(
+            controller: _pageCtrl,
+            itemCount: 4,
+            onPageChanged: (i) => setState(() => _pageIndex = i),
+            itemBuilder: (ctx, i) => Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: RepaintBoundary(
+                  key: _boundaryKeys[i],
+                  child: _buildPage(i, s),
+                ),
               ),
             ),
+          ),
+        ),
 
-            const SizedBox(height: 12),
-            Text('This image will be shared. Nothing here is posted for you automatically.',
-                style: BT.mono(size: 9, color: BT.tx3), textAlign: TextAlign.center),
-          ]),
-        )),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text('This image will be shared. Nothing here is posted for you automatically.',
+              style: BT.mono(size: 9, color: BT.tx3), textAlign: TextAlign.center),
+        ),
 
         SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
             child: GestureDetector(
-              onTap: _sharing ? null : _share,
+              onTap: _sharing ? null : _onActionTap,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 15),
@@ -216,9 +289,11 @@ class _State extends State<SetShareScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2.5,
                             valueColor: AlwaysStoppedAnimation(BT.ink))))
                     : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.ios_share, color: BT.ink, size: 20),
+                        Icon(_currentNeedsPhoto ? Icons.add_a_photo_outlined : Icons.ios_share,
+                            color: BT.ink, size: 20),
                         const SizedBox(width: 8),
-                        Text('Share this set', style: BT.body(size: 16, color: BT.ink)),
+                        Text(_currentNeedsPhoto ? 'Add a photo to continue' : 'Share this set',
+                            style: BT.body(size: 16, color: BT.ink)),
                       ]),
               ),
             ),
@@ -258,46 +333,90 @@ class _PillToggle extends StatelessWidget {
   }
 }
 
-// ── Card style slider: Classic / Product Photo ──────────────────────────────
-class _StyleSlider extends StatelessWidget {
-  final _CardStyle style;
-  final bool hasProductImage;
-  final ValueChanged<_CardStyle> onChanged;
-  const _StyleSlider({
-    required this.style,
-    required this.hasProductImage,
-    required this.onChanged,
-  });
+// ── Page dots: Instagram-Stories-style, also tappable to jump directly ──────
+class _PageDots extends StatelessWidget {
+  final int count;
+  final int index;
+  final ValueChanged<int> onTap;
+  const _PageDots({required this.count, required this.index, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final bt = context.bt;
-    Widget seg(_CardStyle s, String label, {bool enabled = true}) {
-      final on = style == s;
-      return Expanded(child: GestureDetector(
-        onTap: enabled ? () => onChanged(s) : null,
-        child: Opacity(
-          opacity: enabled ? 1 : .4,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(count, (i) {
+        final on = i == index;
+        return GestureDetector(
+          onTap: () => onTap(i),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: on ? 22 : 7,
+            height: 7,
             decoration: BoxDecoration(
-              color: on ? BT.yellow : bt.cardBg,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: on ? BT.ink : bt.cardBorder, width: BT.bw),
-              boxShadow: on ? null : [BoxShadow(color: bt.shadowColor, offset: const Offset(2, 2))],
+              color: on ? BT.yellow : bt.cardBorder,
+              borderRadius: BorderRadius.circular(4),
+              border: on ? Border.all(color: BT.ink, width: 1.2) : null,
             ),
-            child: Text(label, textAlign: TextAlign.center,
-                style: BT.mono(size: 10.5, color: on ? BT.ink : bt.tx)),
           ),
-        ),
-      ));
-    }
-    return Row(children: [
-      seg(_CardStyle.classic, 'Classic'),
-      const SizedBox(width: 8),
-      seg(_CardStyle.product, 'Product Photo', enabled: hasProductImage),
-    ]);
+        );
+      }),
+    );
   }
+}
+
+// ── Canvas placeholder: shown on a "+ Your Photo" page before one's picked,
+//    or on Product Photo when the set has no official image on file ───────
+class _CanvasPrompt extends StatelessWidget {
+  final ShareFormat format;
+  final IconData icon;
+  final String message;
+  final VoidCallback? onTap;
+  const _CanvasPrompt({
+    required this.format,
+    required this.icon,
+    required this.message,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: format.width,
+      height: format.height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: BT.ink, width: BT.bw),
+        boxShadow: BT.shadow,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: StudBackground(
+        color: BT.cream,
+        child: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(
+                color: BT.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: BT.ink, width: BT.bw),
+                boxShadow: BT.shadowSm,
+              ),
+              child: Icon(icon, size: 28, color: BT.ink),
+            ),
+            const SizedBox(height: 14),
+            Text(message, style: BT.body(size: 14, color: BT.ink), textAlign: TextAlign.center),
+            if (onTap != null) ...[
+              const SizedBox(height: 6),
+              Text('Tap to continue', style: BT.mono(size: 10, color: BT.tx3)),
+            ],
+          ]),
+        ),
+      ),
+    ),
+  );
 }
 
 // ── The composed share card (fixed BT.* colors -- always looks the same
@@ -515,31 +634,35 @@ class _SlabSticker extends StatelessWidget {
 }
 
 // ── Product Photo card ────────────────────────────────────────────────────────
-// Uses the set's own official product image (from Rebrickable/BrickSet,
-// already fetched into set.imageUrl for every set) as full-bleed hero art --
-// no upload required, works even for a user with no photo of their own.
+// Dark, editorial "trading card" look, matched field-by-field against a
+// user-provided reference image after two earlier misses: v1 kept
+// BrikStax's usual light cream card body when the reference is dark and
+// moody (near-black photography, dark info panel, white text, gold/yellow
+// reserved for the headline stat and brand mark only); v2 fixed the
+// palette but still only showed a thin 2-cell Current-Value/Pieces row
+// when the reference shows a fuller stacked list (Entry Price, Current
+// Value, Status). Dark panel colors defined locally (not in BT, which is
+// the light-cream/yellow "brick" palette used everywhere else).
 //
-// Rebuilt 2026-08-17 after the first version drifted from the user's actual
-// reference image -- that version kept BrikStax's usual light cream card
-// body, when the reference is a dark, moody "trading card": near-black
-// photography, a dark info panel (NOT cream/white), white text, gold/yellow
-// reserved for the headline stat and brand mark only. This version matches
-// that directly: dark panel colors defined locally (not in BT, which is the
-// light-cream/yellow "brick" palette used everywhere else), a fixed ~56%
-// photo-to-panel proportion (was an Expanded photo eating whatever space
-// was left), label-above-value stat cells sitting directly on the dark
-// background (was a boxed white container), and a separate yellow tagline
-// strip as its own footer band below the QR row (was merged into one row).
-// Real QR code (brikstax://set/<num>, deep_link_service.dart) unchanged.
+// [heroPhoto] lets this same dark card use a user-uploaded photo instead
+// of the set's own official image (set.imageUrl) -- style (this card's
+// look) and photo source are independent choices, not fused; see
+// SetShareScreen's _Variant list, which offers both as separate swipe
+// pages. Falls back to set.imageUrl when heroPhoto is null.
 class _ProductPhotoCard extends StatelessWidget {
   final LegoSet set;
   final bool showDollars;
   final ShareFormat format;
-  const _ProductPhotoCard({required this.set, required this.showDollars, required this.format});
+  final File? heroPhoto;
+  const _ProductPhotoCard({
+    required this.set,
+    required this.showDollars,
+    required this.format,
+    this.heroPhoto,
+  });
 
   static const _panelBg  = Color(0xFF111112);
   static const _txDim    = Color(0xFF9C9A96);
-  static const _txDimmer = Color(0xFF6E6C68);
   // Brighter green/red than BT.green/BT.red -- those are tuned for text on
   // a light cream card and read muddy on a near-black panel. Reuses the
   // same dark-panel-safe pair collection_share_screen.dart's Glass sticker
@@ -573,7 +696,9 @@ class _ProductPhotoCard extends StatelessWidget {
         SizedBox(
           height: photoHeight,
           child: Stack(fit: StackFit.expand, children: [
-            if (set.imageUrl != null)
+            if (heroPhoto != null)
+              Image.file(heroPhoto!, fit: BoxFit.cover)
+            else if (set.imageUrl != null)
               CachedNetworkImage(imageUrl: set.imageUrl!, fit: BoxFit.cover)
             else
               const ColoredBox(color: _panelBg, child: Center(
@@ -639,15 +764,15 @@ class _ProductPhotoCard extends StatelessWidget {
                 Text('No pricing data yet', style: BT.mono(size: 11, color: _txDim)),
               const SizedBox(height: 12),
 
-              // Stat pair -- label above value, sitting directly on the
-              // dark panel (no boxed container).
-              Row(children: [
-                _statCell(showDollars && set.ebayAvg != null
-                    ? '\$${_fmt(set.ebayAvg!)}' : (set.ebayAvg != null ? '🔒' : '—'),
-                    'CURRENT VALUE'),
-                Container(width: 1, height: 30, color: Colors.white12),
-                _statCell(set.pieces?.toString() ?? '—', 'PIECES'),
-              ]),
+              // Stacked label:value list -- matches the density of the
+              // reference's own example (Entry Price / Current Value /
+              // Status), not the thin 2-cell row v2 shipped with.
+              if (set.paid != null)
+                _statRow('Entry Price',
+                    showDollars ? '\$${_fmt(set.paid!)}' : '🔒', muted: true),
+              _statRow('Current Value', showDollars && set.ebayAvg != null
+                  ? '\$${_fmt(set.ebayAvg!)}' : (set.ebayAvg != null ? '🔒' : '—')),
+              _statRow('Status', _statusLabel(set), muted: true),
 
               const Spacer(),
 
@@ -699,15 +824,17 @@ class _ProductPhotoCard extends StatelessWidget {
     return s.status == 'sealed' ? 'ACTIVE · SEALED' : 'ACTIVE · OPEN';
   }
 
-  Widget _statCell(String value, String label) => Expanded(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: BT.mono(size: 7.5, color: _txDimmer)),
-        const SizedBox(height: 2),
-        Text(value, style: BT.display(size: 16, color: Colors.white),
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-      ]),
-    ),
+  // Stacked label:value row -- [muted] uses a smaller mono value style
+  // (Entry Price, Status) so the one headline-worthy figure (Current
+  // Value) is the only one competing visually with the ROI% above it.
+  Widget _statRow(String label, String value, {bool muted = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label.toUpperCase(), style: BT.mono(size: 8.5, color: _txDim)),
+      Text(value,
+          style: muted
+              ? BT.mono(size: 11, color: _txDim)
+              : BT.display(size: 14, color: Colors.white)),
+    ]),
   );
 }
