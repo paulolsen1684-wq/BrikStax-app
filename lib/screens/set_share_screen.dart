@@ -772,7 +772,7 @@ class _ProductPhotoCard extends StatelessWidget {
                     showDollars ? '\$${_fmt(set.paid!)}' : '🔒', muted: true),
               _statRow('Current Value', showDollars && set.ebayAvg != null
                   ? '\$${_fmt(set.ebayAvg!)}' : (set.ebayAvg != null ? '🔒' : '—')),
-              _statRow('Status', _statusLabel(set), muted: true),
+              _statRow('Status', _statusRowText(set), muted: true),
 
               const Spacer(),
 
@@ -822,6 +822,18 @@ class _ProductPhotoCard extends StatelessWidget {
   static String _statusLabel(LegoSet s) {
     if (s.retired) return s.inRetirementWindow ? 'RETIRED · PRICE CLIMBING' : 'RETIRED';
     return s.status == 'sealed' ? 'ACTIVE · SEALED' : 'ACTIVE · OPEN';
+  }
+
+  // The Status stat row wants "Retired (2021)" style -- s.exitDate comes
+  // straight from BrickSet's own exitDate field (already fetched for every
+  // set on add, or backfilled by CollectionProvider's fill-missing-data
+  // pass), so a real year is usually available, not fabricated.
+  static String _statusRowText(LegoSet s) {
+    if (s.retired) {
+      final year = s.exitDate?.year;
+      return year != null ? 'Retired ($year)' : 'Retired';
+    }
+    return s.status == 'sealed' ? 'Active · Sealed' : 'Active · Open';
   }
 
   // Stacked label:value row -- [muted] uses a smaller mono value style
