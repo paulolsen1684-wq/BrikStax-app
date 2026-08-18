@@ -295,18 +295,34 @@ class _HeroBgState extends State<_HeroBg> {
           bottom: 14, left: 16, right: 16,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (images.length > 1) ...[
-              Row(children: List.generate(images.length, (i) =>
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.only(right: 4),
-                  width: i == _page ? 14 : 5,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: i == _page ? Colors.white : Colors.white38,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
+              // Real overflow bug, found via on-device testing: a set with
+              // a big BrickSet gallery (e.g. the Falcon's 61 additional
+              // images) generates one dot per image in a plain Row with no
+              // wrap/scroll protection -- more than a handful of dots
+              // easily exceeds the hero's width and hard-overflows past
+              // the Positioned's right edge. Wrapped in a horizontal
+              // scroll strip instead: every dot stays reachable (nothing
+              // hidden/capped), it just scrolls rather than overflowing
+              // when there are more than fit on screen at once.
+              SizedBox(
+                height: 5,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const ClampingScrollPhysics(),
+                  child: Row(children: List.generate(images.length, (i) =>
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(right: 4),
+                      width: i == _page ? 14 : 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: i == _page ? Colors.white : Colors.white38,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  )),
                 ),
-              )),
+              ),
               const SizedBox(height: 8),
             ],
             Wrap(spacing: 6, children: [

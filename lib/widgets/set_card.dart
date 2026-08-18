@@ -94,19 +94,34 @@ class SetCard extends StatelessWidget {
 
               const SizedBox(height: 5),
 
-              // Row 4: prices + ROI
+              // Row 4: prices + ROI -- the price cluster (Paid/MSRP/eBay)
+              // used to sit in a plain Row with only a Spacer for slack, so
+              // on a narrow-enough screen (confirmed via a real device's
+              // cover/outer display) it hard-overflowed past the ROI badge
+              // with nowhere to give. Expanded+FittedBox lets the whole
+              // cluster scale down together instead -- same layout/size on
+              // any normal screen, no data hidden, just shrinks as a unit
+              // if it doesn't fit, rather than overflowing.
               Row(children: [
-                if (set.paid != null)
-                  PricePair(label: 'Paid', value: set.paid!),
-                if (set.retail != null) ...[
-                  const SizedBox(width: 6),
-                  PricePair(label: 'MSRP', value: set.retail!),
-                ],
-                if (ebay != null) ...[
-                  const SizedBox(width: 6),
-                  PricePair(label: 'eBay', value: ebay, color: BT.green),
-                ],
-                const Spacer(),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (set.paid != null)
+                        PricePair(label: 'Paid', value: set.paid!),
+                      if (set.retail != null) ...[
+                        const SizedBox(width: 6),
+                        PricePair(label: 'MSRP', value: set.retail!),
+                      ],
+                      if (ebay != null) ...[
+                        const SizedBox(width: 6),
+                        PricePair(label: 'eBay', value: ebay, color: BT.green),
+                      ],
+                    ]),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 if (roi != null) RoiBadge(roi)
                  else if (set.purchaseSource == PurchaseSource.gwp) const GwpBadge(),
               ]),
