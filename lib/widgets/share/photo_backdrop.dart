@@ -13,7 +13,7 @@
 // become a compact "sticker" overlaid on a fixed-ratio canvas.
 //
 // Two formats, added 2026-08-17 (see ShareFormat) -- Story (9:16, the
-// original shape, best for Instagram/Snapchat Stories) and Post (3:4,
+// original shape, best for Instagram/Snapchat Stories) and Post (4:5,
 // better for a normal feed post where a tall 9:16 image gets awkwardly
 // cropped). Applies to BOTH this photo-backdrop path AND the plain
 // card-only path via FixedRatioCanvas below -- card-only mode never had a
@@ -38,9 +38,12 @@ import '../../theme/app_themes.dart';
 enum ShareFormat { story, post }
 
 extension ShareFormatX on ShareFormat {
-  String get label => this == ShareFormat.story ? 'Story · 9:16' : 'Post · 3:4';
+  String get label => this == ShareFormat.story ? 'Story · 9:16' : 'Post · 4:5';
   double get width => 540;
-  double get height => this == ShareFormat.story ? 960 : 720; // 3:4 at width 540
+  // Post corrected 2026-08-19 from a guessed 3:4 to Instagram's actual feed
+  // ratio (4:5, their max-height standard) -- 540 * 5/4 = 675. Story's 9:16
+  // was already correct (also IG's real Story/Reel ratio), unchanged.
+  double get height => this == ShareFormat.story ? 960 : 675;
   double get maxStickerHeight => height * .34;
 }
 
@@ -203,7 +206,7 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
 }
 
 /// Composites [card] as a sticker over [photo] on a canvas sized to
-/// [format] (Story 9:16 or Post 3:4). Returns [card] unchanged when [photo]
+/// [format] (Story 9:16 or Post 4:5). Returns [card] unchanged when [photo]
 /// is null -- every share screen's existing plain-card look is the default;
 /// this only changes anything once the user opts into a photo backdrop.
 ///
