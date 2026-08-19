@@ -67,7 +67,7 @@ class _State extends State<SetShareScreen> {
   }
 
   Future<void> _pickPhoto() async {
-    final photo = await pickBackdropPhoto(context);
+    final photo = await pickBackdropPhoto(context, format: _format);
     if (photo != null) setState(() => _photo = photo);
   }
 

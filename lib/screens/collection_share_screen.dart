@@ -85,7 +85,7 @@ class _State extends State<CollectionShareScreen> {
   bool _sharing = false;
 
   Future<void> _pickPhoto() async {
-    final photo = await pickBackdropPhoto(context);
+    final photo = await pickBackdropPhoto(context, format: _format);
     if (photo != null) setState(() => _photo = photo);
   }
 

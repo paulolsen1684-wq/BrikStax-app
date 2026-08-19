@@ -18,8 +18,19 @@
 // cropped). Applies to BOTH this photo-backdrop path AND the plain
 // card-only path via FixedRatioCanvas below -- card-only mode never had a
 // fixed canvas before this, just the card's own natural height.
+//
+// Crop step added 2026-08-19: picking used to hand the raw photo straight
+// to PhotoBackdropCard, which BoxFit.cover-crops it into the canvas with
+// zero user visibility into what actually gets cut off. pickBackdropPhoto
+// now runs the picked photo through image_cropper (already a pubspec
+// dependency, and Android's native crop activity + BrikStaxCropTheme were
+// already fully set up in AndroidManifest.xml/styles.xml -- just never
+// wired into any Dart code before this) locked to the same aspect ratio as
+// [format], so what the user frames in the crop UI is exactly what shows
+// in the final card, not a guess.
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_themes.dart';
@@ -93,7 +104,11 @@ class FixedRatioCanvas extends StatelessWidget {
   );
 }
 
-Future<File?> pickBackdropPhoto(BuildContext context) async {
+/// Picks a photo (camera or gallery), then crops it to exactly [format]'s
+/// aspect ratio via image_cropper's native platform UI -- what the user
+/// frames here is exactly what shows in the final card, not left to an
+/// unseen BoxFit.cover guess. Returns null if the user cancels either step.
+Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat format}) async {
   final bt = context.bt;
   final source = await showModalBottomSheet<ImageSource>(
     context: context,
@@ -156,7 +171,35 @@ Future<File?> pickBackdropPhoto(BuildContext context) async {
   final picked = await ImagePicker()
       .pickImage(source: source, maxWidth: 1600, imageQuality: 90);
   if (picked == null) return null;
-  return File(picked.path);
+
+  // Locked to format's exact aspect ratio -- no "pick your own ratio" menu,
+  // since the canvas it'll actually be shown on is already fixed. Colors
+  // match BrikStax's ink/yellow brand pair; Android additionally already
+  // has BrikStaxCropTheme wired up natively (AndroidManifest.xml/styles.xml).
+  final cropped = await ImageCropper().cropImage(
+    sourcePath: picked.path,
+    aspectRatio: CropAspectRatio(ratioX: format.width, ratioY: format.height),
+    compressQuality: 90,
+    uiSettings: [
+      AndroidUiSettings(
+        toolbarTitle: 'Crop Photo',
+        toolbarColor: BT.ink,
+        toolbarWidgetColor: BT.yellow,
+        activeControlsWidgetColor: BT.yellow,
+        statusBarLight: false,
+        lockAspectRatio: true,
+        hideBottomControls: true, // ratio's fixed -- no reason to offer switching it
+      ),
+      IOSUiSettings(
+        title: 'Crop Photo',
+        aspectRatioLockEnabled: true,
+        resetAspectRatioEnabled: false,
+        aspectRatioPickerButtonHidden: true,
+      ),
+    ],
+  );
+  if (cropped == null) return null; // user backed out of the crop step
+  return File(cropped.path);
 }
 
 /// Composites [card] as a sticker over [photo] on a canvas sized to
