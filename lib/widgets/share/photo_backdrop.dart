@@ -179,6 +179,17 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
   // since the canvas it'll actually be shown on is already fixed. Colors
   // match BrikStax's ink/yellow brand pair; Android additionally already
   // has BrikStaxCropTheme wired up natively (AndroidManifest.xml/styles.xml).
+  //
+  // A persistent 3x3 rule-of-thirds grid (showCropGrid, added 2026-08-19
+  // per user request for "focus" guidance on the crop screen itself) sits
+  // permanently over the crop box, not just while dragging -- since this
+  // is a real native screen (Android's UCropActivity / iOS's
+  // TOCropViewController), not a Flutter widget, there's no way to
+  // overlay custom Flutter UI on it; this grid option is the actual
+  // native crop tool's own composition-guide feature, just switched on
+  // and styled to match. iOS's native cropper already shows its own
+  // built-in grid while dragging as standard platform behavior -- nothing
+  // to configure there.
   final cropped = await ImageCropper().cropImage(
     sourcePath: picked.path,
     aspectRatio: CropAspectRatio(ratioX: format.width, ratioY: format.height),
@@ -192,6 +203,12 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
         statusBarLight: false,
         lockAspectRatio: true,
         hideBottomControls: true, // ratio's fixed -- no reason to offer switching it
+        showCropGrid: true,
+        cropGridRowCount: 3,
+        cropGridColumnCount: 3,
+        cropGridColor: BT.yellow.withOpacity(.7),
+        cropGridStrokeWidth: 1,
+        cropFrameColor: BT.yellow,
       ),
       IOSUiSettings(
         title: 'Crop Photo',
