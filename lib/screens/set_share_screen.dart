@@ -620,12 +620,18 @@ class _SlabSticker extends StatelessWidget {
                     Text(set.name, style: BT.body(size: 13),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 2),
-                    Text(
-                      hasDollarPair
-                          ? '\$${_fmt(set.paid!)} → \$${_fmt(set.ebayAvg!)}'
-                          : 'CERT NO. ${set.num}',
-                      style: BT.mono(size: 9, color: BT.tx3),
-                    ),
+                    // Cert number always shown now -- was previously
+                    // replaced by the dollar pair when showDollars was on,
+                    // silently dropping the set's own identifying number.
+                    // Real content-parity fix 2026-08-19 (same complaint
+                    // as Collection's glass sticker): matched against the
+                    // set number was hidden entirely.
+                    Text('CERT NO. ${set.num}', style: BT.mono(size: 9, color: BT.tx3)),
+                    if (hasDollarPair) ...[
+                      const SizedBox(height: 1),
+                      Text('\$${_fmt(set.paid!)} → \$${_fmt(set.ebayAvg!)}',
+                          style: BT.mono(size: 8, color: BT.tx2)),
+                    ],
                   ],
                 ),
               ),
@@ -640,6 +646,30 @@ class _SlabSticker extends StatelessWidget {
                     : '—',
                 style: BT.display(size: 17, color: gradeColor),
               ),
+            ),
+          ]),
+        ),
+        // Status row -- the no-photo _SetShareCard has a SEALED/OPEN badge
+        // that this sticker was missing entirely (same real content-parity
+        // gap Collection's glass sticker had). Added as its own thin strip
+        // rather than crammed into the already-tight main row.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: BT.ink, width: 1.2)),
+          ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: set.status == 'sealed' ? BT.greenBg : BT.yellowBg,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                    color: set.status == 'sealed' ? BT.green : BT.gold, width: 1.2),
+              ),
+              child: Text(set.status == 'sealed' ? 'SEALED' : 'OPEN',
+                  style: BT.mono(size: 8, color: BT.ink)),
             ),
           ]),
         ),
