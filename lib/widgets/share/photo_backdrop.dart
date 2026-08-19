@@ -210,12 +210,19 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
 /// is null -- every share screen's existing plain-card look is the default;
 /// this only changes anything once the user opts into a photo backdrop.
 ///
-/// [card] is capped at [format]'s maxStickerHeight regardless of what's
-/// passed in -- this is the actual fix for the original "sticker swallows
-/// the whole photo" bug (den_share_screen.dart's/set_share_screen.dart's/
-/// collection_share_screen.dart's own card widgets are still full-size
-/// when used standalone with no photo; only in this photo-backdrop path
-/// do they need to earn their keep as a small overlay instead).
+/// [card] is capped at [format]'s maxStickerHeight by default -- this is
+/// the actual fix for the original "sticker swallows the whole photo" bug
+/// (den_share_screen.dart's/set_share_screen.dart's/collection_share_screen
+/// .dart's own card widgets are still full-size when used standalone with
+/// no photo; only in this photo-backdrop path do they need to earn their
+/// keep as a small overlay instead). Set [capSticker] to false to opt a
+/// specific sticker out of that cap when it's been deliberately built to
+/// show full card-parity content instead of staying compact (Collection's
+/// glass sticker, 2026-08-19, after the user asked for the same data shown
+/// with or without a photo) -- the content in that case is still naturally
+/// bounded (every list it draws from is already `.take(3)`-capped), so
+/// there's no risk of genuinely unbounded growth, just a taller sticker
+/// than the 34%-of-canvas default allows.
 ///
 /// [scrim] controls the bottom darkening gradient: on by default for
 /// stickers that are just floating typography with no background of their
@@ -229,21 +236,25 @@ class PhotoBackdropCard extends StatelessWidget {
   final Widget card;
   final bool   scrim;
   final ShareFormat format;
+  final bool   capSticker;
   const PhotoBackdropCard({
     super.key,
     required this.photo,
     required this.card,
     this.scrim = true,
     this.format = ShareFormat.story,
+    this.capSticker = true,
   });
 
   @override
   Widget build(BuildContext context) {
     if (photo == null) return card;
-    final capped = ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: format.maxStickerHeight),
-      child: card,
-    );
+    final capped = capSticker
+        ? ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: format.maxStickerHeight),
+            child: card,
+          )
+        : card;
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: SizedBox(

@@ -205,6 +205,10 @@ class _State extends State<CollectionShareScreen> {
                         photo: _photo,
                         format: _format,
                         scrim: false, // the glass panel supplies its own contrast via blur
+                        // Opted out of the default sticker-height cap 2026-08-19
+                        // -- user wants full card parity (top gainers + theme
+                        // chips too), not the original compact-only content.
+                        capSticker: false,
                         card: _GlassSticker(scope: scope, showDollars: _showDollars),
                       ),
               ),
@@ -460,6 +464,17 @@ class _GlassSticker extends StatelessWidget {
         : '${roi >= 0 ? '+' : ''}${roi.toStringAsFixed(0)}%'
           '${showDollars && scope.totalMarket > 0 ? ' · \$${_fmt(scope.totalMarket)}' : ''}';
 
+    // Full card-parity content, added 2026-08-19 -- previously this sticker
+    // only ever showed the stats row, genuinely less than the no-photo
+    // card (top gainers + theme chips), which read as a content downgrade
+    // rather than a deliberate compact style. Same data, same .take(3)
+    // caps, just restyled for the frosted-glass look instead of the solid
+    // card's boxed white containers.
+    final themes = scope.byTheme.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final topThemes = themes.take(3).toList();
+    final topGainers = scope.topGainers.take(3).toList();
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
@@ -486,6 +501,32 @@ class _GlassSticker extends StatelessWidget {
               _glassStat(scope.sealedCount.toString(), 'SEALED'),
               _glassStat(roiText, 'ROI', valueColor: roiColor),
             ]),
+
+            if (topGainers.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Column(children: topGainers.map((s) => _glassGainerRow(s)).toList()),
+            ],
+
+            if (topThemes.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6, runSpacing: 6,
+                children: topThemes.map((e) {
+                  final label = e.key.split(' > ').first;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(.14),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: Colors.white.withOpacity(.4), width: 1.2),
+                    ),
+                    child: Text('$label · ${e.value}',
+                        style: BT.mono(size: 8.5, color: Colors.white)),
+                  );
+                }).toList(),
+              ),
+            ],
+
             const SizedBox(height: 12),
             Center(child: MadeWithBrikStax(
                 textColor: Colors.white.withOpacity(.8), iconSize: 12)),
@@ -494,6 +535,25 @@ class _GlassSticker extends StatelessWidget {
       ),
     );
   }
+
+  Widget _glassGainerRow(LegoSet s) => Container(
+    margin: const EdgeInsets.only(bottom: 6),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(.14),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.white.withOpacity(.35), width: 1.2),
+    ),
+    child: Row(children: [
+      const Text('📈', style: TextStyle(fontSize: 12)),
+      const SizedBox(width: 7),
+      Expanded(child: Text(s.name,
+          style: BT.body(size: 11, color: Colors.white),
+          maxLines: 1, overflow: TextOverflow.ellipsis)),
+      Text('+${s.roi!.toStringAsFixed(0)}%',
+          style: BT.mono(size: 8, weight: FontWeight.w700, color: const Color(0xFF4EE896))),
+    ]),
+  );
 
   Widget _glassStat(String value, String label, {Color valueColor = Colors.white}) => Expanded(
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
