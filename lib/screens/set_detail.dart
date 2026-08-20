@@ -8,6 +8,7 @@ import '../models/lego_set.dart';
 import '../models/brickset_extras.dart';
 import '../providers/collection.dart';
 import '../services/api.dart';
+import '../services/rebrickable_link.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/atoms.dart';
@@ -1010,6 +1011,11 @@ class _DetailsTabState extends State<_DetailsTab> {
         ]),
         const SizedBox(height: 12),
 
+        // ── Rebrickable link -- always available, no fetch needed (the
+        //    set number IS the identifier, see rebrickable_link.dart).
+        _rebrickableCard(bt, s.num),
+        const SizedBox(height: 12),
+
         // ── BrickSet community rating ────────────────────────────────────
         if (extras != null && extras.hasRating) ...[
           _ratingCard(bt, extras),
@@ -1221,6 +1227,27 @@ class _DetailsTabState extends State<_DetailsTab> {
           ]),
         ),
       );
+
+  // ── Rebrickable link card ─────────────────────────────────────────────────
+  Widget _rebrickableCard(BrikStaxColors bt, String num) => GestureDetector(
+    onTap: () => launchUrl(Uri.parse(rebrickableUrl(num)),
+        mode: LaunchMode.externalApplication),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: bt.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: bt.cardBorder, width: BT.bw),
+        boxShadow: [BoxShadow(color: bt.shadowColor,
+            offset: const Offset(2, 2))],
+      ),
+      child: Row(children: [
+        Text('View on Rebrickable', style: BT.mono(size: 11, color: bt.tx3)),
+        const Spacer(),
+        Icon(Icons.open_in_new, color: bt.txMuted, size: 14),
+      ]),
+    ),
+  );
 
   // ── BrickSet rating card ────────────────────────────────────────────────
   Widget _ratingCard(BrikStaxColors bt, BrickSetExtras extras) => GestureDetector(

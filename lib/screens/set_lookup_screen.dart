@@ -15,8 +15,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/collection.dart';
 import '../services/api.dart';
+import '../services/rebrickable_link.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import 'add_set.dart';
@@ -281,6 +283,17 @@ class _State extends State<SetLookupScreen> {
               [num, if (year != null) '$year', if (theme != null) theme].join(' · '),
               style: BT.mono(size: 10, color: bt.tx3),
               maxLines: 1, overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            GestureDetector(
+              onTap: () => launchUrl(Uri.parse(rebrickableUrl(num)),
+                  mode: LaunchMode.externalApplication),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('View on Rebrickable',
+                    style: BT.mono(size: 9.5, color: bt.tx3)),
+                const SizedBox(width: 3),
+                Icon(Icons.open_in_new, color: bt.txMuted, size: 11),
+              ]),
             ),
           ])),
         ]),
