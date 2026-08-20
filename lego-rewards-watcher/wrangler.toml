@@ -1,0 +1,53 @@
+# Reconstructed 2026-08-20 from the live "lego-rewards-watcher" Cloudflare
+# Worker via the Cloudflare API (GET .../workers/scripts/lego-rewards-watcher
+# /settings, .../schedules) -- this worker never had a repo anywhere, this
+# repo included (see CLAUDE.md's "Push notifications" section for its full
+# history: a separate personal Worker, outside brikstax-worker, monitoring
+# LEGO Insiders Rewards, always maintained by pasting worker.js by hand into
+# the Cloudflare dashboard's Quick Edit view).
+#
+# Unlike cloudflare-worker/wrangler.toml's reconstruction, the actual
+# worker.js CONTENT could not be pulled the same way this time -- Cloudflare's
+# .../workers/scripts/{name}/content endpoint rejected the OAuth token
+# wrangler itself uses ("Method not allowed for this authentication scheme",
+# confirmed reproducible, not a transient error) even though that same token
+# works fine for /settings and /schedules. Whatever token successfully
+# pulled brikstax-worker's content originally must have been a real
+# dashboard-issued API Token (Workers Scripts:Edit), not an OAuth session --
+# none was available this session. worker.js here is a placeholder until
+# the real source is pasted in from the dashboard's Quick Edit view.
+#
+# Secrets (BRIKSTAX_PUSH_SECRET, DISCORD_WEBHOOK_URL, LEGO_AUTHORIZATION,
+# LEGO_COOKIE, LEGO_FFF_ID, LEGO_SESSION_COOKIE_ID, LEGO_VISITOR_GUID,
+# MANUAL_TRIGGER_KEY, RESEND_API_KEY, SYNC_KEY) are deliberately NOT in this
+# file for the same reason cloudflare-worker/wrangler.toml's don't have
+# theirs -- Cloudflare's API only ever returns secret *names*, never values.
+# They already exist on the live worker; `wrangler deploy` leaves existing
+# secrets untouched, so this file works as-is for redeploying code/config
+# changes without needing to re-enter any of them.
+
+name = "lego-rewards-watcher"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+[triggers]
+# The account-wide 5-cron-per-account ceiling documented in
+# cloudflare-worker/wrangler.toml includes this trigger as one of the "at
+# least one on the separate lego-rewards-watcher Worker" slots. Confirmed
+# live via the Cloudflare API's .../schedules endpoint.
+crons = ["*/15 * * * *"]
+
+[[kv_namespaces]]
+binding = "REWARDS_KV"
+id = "d756d021417946d0a25a4918836163d7"
+
+[[services]]
+binding = "BRIKSTAX_WORKER"
+service = "brikstax-worker"
+environment = "production"
+
+[vars]
+ALERT_EMAIL = "paul.olsen1684@gmail.com"
+LEGO_SECTION_ID = "blt85598c8f26f2ddbd"
+NTFY_TOPIC = "brikstax-lego-457c61ee44fe"
