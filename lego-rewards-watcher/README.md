@@ -15,32 +15,72 @@ folder exists so `wrangler deploy` can be run directly without silently
 dropping the KV binding, service binding, plaintext vars, or the cron
 trigger the live worker actually has.
 
-## ⚠️ `worker.js` here is a placeholder, not the real source
+## `worker.js` — real source, pasted in 2026-08-20, two bugs fixed
 
-`wrangler.toml` was reconstructed 2026-08-20 from the live worker's real
-config via the Cloudflare API (`.../workers/scripts/lego-rewards-watcher
-/settings`, `.../schedules`) and validated with `wrangler deploy --dry-run`
-— bindings resolved exactly as expected (`REWARDS_KV`, the `BRIKSTAX_WORKER`
-service binding, `ALERT_EMAIL`/`LEGO_SECTION_ID`/`NTFY_TOPIC`).
-
-The actual `worker.js` **content** could not be pulled the same way
-`cloudflare-worker/worker.js` was — Cloudflare's
-`.../workers/scripts/{name}/content` endpoint rejected the OAuth token
-`wrangler` itself authenticates with ("Method not allowed for this
-authentication scheme", confirmed reproducible across multiple attempts
-and header variations), even though that identical token works fine for
-`/settings` and `/schedules`. Whatever credential successfully pulled
+The actual `worker.js` **content** could not be pulled via the Cloudflare
+API the way `cloudflare-worker/worker.js` was — the
+`.../workers/scripts/{name}/content` endpoint rejects the OAuth token
+`wrangler` authenticates with ("Method not allowed for this authentication
+scheme", confirmed reproducible across multiple attempts, header variations,
+*and* wrangler versions — also tried `wrangler versions download`, which
+doesn't exist as a subcommand in any wrangler release checked), even though
+that identical token works fine for `/settings`, `/schedules`, and
+`versions list`/`view`. Whatever credential successfully pulled
 `brikstax-worker`'s content originally must have been a real
 dashboard-issued API Token (Workers Scripts:Edit scope), not an OAuth
-session token — none was available when this folder was created.
+session token — none was available this session either. Resolved instead by
+the user pasting the file directly from the dashboard's Quick Edit view.
 
-**Until the real source is pasted in** (Cloudflare dashboard → Workers &
-Pages → `lego-rewards-watcher` → Edit Code / Quick Edit → copy the full
-file → paste over the placeholder `worker.js` here), **do not run
-`wrangler deploy` from this folder** — it would overwrite the live
-worker's real `scheduled()`/`fetch()` logic with the placeholder stub.
+**Two real bugs found once the real source was readable, both fixed in this
+file (not yet deployed — see Deploying below):**
 
-## Deploying (once real source is in place)
+1. **"Leaving soon" alerts repeated indefinitely, not just occasionally.**
+   `wasExpirationAlerted` is a one-off bookkeeping flag with no backing in
+   LEGO's API — it only ever gets written onto `current` for items in
+   *that specific run's* `expiringItems` list. Since an already-alerted item
+   is (correctly) excluded from `expiringItems` on the next run, nothing
+   ever re-set the flag on the following run's freshly-rebuilt `current`
+   before it was saved — so the flag silently vanished from the snapshot
+   after exactly one cycle. Next run reads a flagless snapshot and alerts
+   again. Traced cycle-by-cycle this is a deterministic
+   alert → skip → alert → skip pattern for as long as an item stays in the
+   7-day window, not a probabilistic one. Fixed by carrying
+   `wasExpirationAlerted` forward from `previous` into `current` for every
+   run, unconditionally, right after `previous` is loaded — not just
+   setting it fresh for the current run's own `expiringItems`. Known,
+   accepted limitation of the fix (matches the flag's original evident
+   intent, not a new gap): it doesn't reset if an item's `endDate` changes
+   later (e.g. LEGO extends or relists it) — the original code never
+   handled that case either, and it's out of scope for the repeat-alert bug.
+2. **A second trigger was running the full alert pipeline, not a status
+   check.** `wrangler tail` showed an external `GET /?key=<trigger key>`
+   firing roughly in sync with the `*/15 * * * *` cron (believed to be an
+   uptime/status monitor). That path fell through to the same
+   `runCheck(env)` the cron calls — a full LEGO fetch + diff + alert run —
+   instead of the cheap, side-effect-free `/status` view that already
+   exists for this exact purpose. Combined with bug 1, this roughly doubled
+   the effective alert-check cadence and compounded the flag-dropping
+   pattern into something close to "an alert almost every cycle." Fixed:
+   that fallback now returns a lightweight liveness JSON response instead
+   of invoking `runCheck()`. The real manual "run it now" path is still
+   `POST /trigger` (what `/status`'s own Refresh button already uses),
+   unaffected by this change.
+
+**Push notifications not arriving was investigated and is _not_ a bug in
+this file.** `sendBrikStaxPush`'s header (`x-brikstax-push-secret`) matches
+what `brikstax-worker`'s `/push/send` checks (`env.PUSH_SEND_SECRET`,
+confirmed by reading that handler directly), both secrets exist on their
+respective workers, and the call goes through the `BRIKSTAX_WORKER` service
+binding correctly. If the secret values didn't actually match,
+`sendBrikStaxPush` would return `ok:false` and `runCheck` would post a
+"⚠️ ... BrikStax push failed" line to Discord on every run — worth checking
+whether that's ever actually shown up. If it hasn't, the send is very
+likely succeeding server-side and the real gap is on the BrikStax app side:
+a device only receives `dev_alerts`-topic pushes when both `DevMode` is on
+*and* the user has opted into push notifications (see `CLAUDE.md`'s "Push
+notifications" section) — nothing to fix here for that.
+
+## Deploying
 
 ```
 cd lego-rewards-watcher
