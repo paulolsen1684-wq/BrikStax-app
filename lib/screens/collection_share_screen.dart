@@ -29,6 +29,8 @@ import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/share/photo_backdrop.dart';
 import '../widgets/share/brand_mark.dart';
+import '../services/whats_new_service.dart';
+import '../widgets/whats_new_banner.dart';
 
 /// The set of sets being shared, plus what to call it -- computed once from
 /// either an explicit filtered list (Inventory screen, filter active) or
@@ -84,8 +86,17 @@ class _State extends State<CollectionShareScreen> {
   ShareFormat _format = ShareFormat.story;
   bool _sharing = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // "Open a share card" quest task -- see whats_new_service.dart.
+    WhatsNewService.instance.completeTask('open_share_card').then((r) {
+      if (mounted) showWhatsNewFeedback(context, r);
+    });
+  }
+
   Future<void> _pickPhoto() async {
-    final photo = await pickBackdropPhoto(context, format: _format);
+    final photo = await pickBackdropPhoto(context);
     if (photo != null) setState(() => _photo = photo);
   }
 
@@ -189,7 +200,15 @@ class _State extends State<CollectionShareScreen> {
             ],
             const SizedBox(height: 12),
 
-            FormatToggle(format: _format, onChanged: (f) => setState(() => _format = f)),
+            FormatToggle(format: _format, onChanged: (f) {
+              setState(() => _format = f);
+              if (f == ShareFormat.post) {
+                // "Try the new Post format" quest task.
+                WhatsNewService.instance.completeTask('try_post_format').then((r) {
+                  if (mounted) showWhatsNewFeedback(context, r);
+                });
+              }
+            }),
             const SizedBox(height: 16),
 
             FittedBox(

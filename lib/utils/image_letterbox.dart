@@ -4,10 +4,15 @@
 // counterpart to image_cropper's crop-based approach. Used specifically
 // for Community feed uploads (see community_feed_screen.dart's _pickImage)
 // after feedback that a tall/narrow photo (e.g. a portrait phone shot)
-// forced through a locked 4:3 crop was losing most of the photo's content
-// -- image_cropper is fundamentally a crop tool, it has no "shrink to fit
-// and pad the rest" mode, so there was no cropper setting that could fix
-// this.
+// forced through a locked-aspect crop was losing most of the photo's
+// content -- image_cropper is fundamentally a crop tool, it has no
+// "shrink to fit and pad the rest" mode, so there was no cropper setting
+// that could fix this.
+//
+// Default ratio is 4:5 (Instagram's real feed-post ratio, same one
+// ShareFormat.post already uses elsewhere in this app) -- changed
+// 2026-08-22 from the original 4:3 so Community posts read as a proper
+// portrait feed instead of a landscape photo strip.
 //
 // Computes a canvas just big enough to fully CONTAIN the source image at
 // the target aspect ratio, centers the source on it, and fills the
@@ -29,7 +34,7 @@ class ImageLetterbox {
   /// the user).
   static Future<File?> pad(
     File source, {
-    double aspect = 4 / 3,
+    double aspect = 4 / 5,
     Color bg = const Color(0xFF0A0907),
   }) async {
     try {

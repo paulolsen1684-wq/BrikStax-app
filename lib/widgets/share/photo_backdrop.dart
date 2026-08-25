@@ -25,15 +25,29 @@
 // now runs the picked photo through image_cropper (already a pubspec
 // dependency, and Android's native crop activity + BrikStaxCropTheme were
 // already fully set up in AndroidManifest.xml/styles.xml -- just never
-// wired into any Dart code before this) locked to the same aspect ratio as
-// [format], so what the user frames in the crop UI is exactly what shows
-// in the final card, not a guess.
+// wired into any Dart code before this), so what the user frames in the
+// crop UI is exactly what shows in the final card, not a guess.
+//
+// Crop lock dropped 2026-08-20, real user complaint: the crop step used to
+// force-lock to [format]'s exact aspect ratio (9:16/4:5), and BoxFit.cover
+// then filled the canvas edge-to-edge with whatever that produced -- for a
+// photo that isn't naturally that tall/narrow, the only way to satisfy the
+// lock was to crop out real content (there was no way to "zoom out" past
+// the source photo's own bounds, a hard platform limit of the native crop
+// tool, not a bug in this code). Fixed two ways together, since either one
+// alone doesn't help: the crop step is now freeform (no forced ratio), and
+// PhotoBackdropCard below switched from BoxFit.cover to BoxFit.contain
+// over a cream stud-textured background (reusing FixedRatioCanvas's own
+// backdrop) -- whatever shape the user crops to now just letterboxes onto
+// the canvas as a visible border instead of being force-cropped further.
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_themes.dart';
+import '../../services/whats_new_service.dart';
+import '../whats_new_banner.dart';
 
 enum ShareFormat { story, post }
 
@@ -107,11 +121,14 @@ class FixedRatioCanvas extends StatelessWidget {
   );
 }
 
-/// Picks a photo (camera or gallery), then crops it to exactly [format]'s
-/// aspect ratio via image_cropper's native platform UI -- what the user
-/// frames here is exactly what shows in the final card, not left to an
-/// unseen BoxFit.cover guess. Returns null if the user cancels either step.
-Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat format}) async {
+/// Picks a photo (camera or gallery), then crops it via image_cropper's
+/// native platform UI -- freeform, no forced aspect ratio (see the header
+/// comment above for why: a locked ratio meant "zoom out" wasn't possible,
+/// since a crop tool can't show more than the source photo actually
+/// captured). Whatever shape the user crops to gets letterboxed onto the
+/// canvas by PhotoBackdropCard, not force-filled. Returns null if the user
+/// cancels either step.
+Future<File?> pickBackdropPhoto(BuildContext context) async {
   final bt = context.bt;
   final source = await showModalBottomSheet<ImageSource>(
     context: context,
@@ -175,10 +192,12 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
       .pickImage(source: source, maxWidth: 1600, imageQuality: 90);
   if (picked == null) return null;
 
-  // Locked to format's exact aspect ratio -- no "pick your own ratio" menu,
-  // since the canvas it'll actually be shown on is already fixed. Colors
-  // match BrikStax's ink/yellow brand pair; Android additionally already
-  // has BrikStaxCropTheme wired up natively (AndroidManifest.xml/styles.xml).
+  // Freeform -- no aspectRatio passed, lockAspectRatio:false on both
+  // platforms -- so the user can crop to whatever shape actually fits what
+  // they want in frame; PhotoBackdropCard letterboxes the result onto the
+  // fixed-ratio canvas instead of forcing it to match. Colors still match
+  // BrikStax's ink/yellow brand pair; Android additionally already has
+  // BrikStaxCropTheme wired up natively (AndroidManifest.xml/styles.xml).
   //
   // A persistent 3x3 rule-of-thirds grid (showCropGrid, added 2026-08-19
   // per user request for "focus" guidance on the crop screen itself) sits
@@ -192,7 +211,6 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
   // to configure there.
   final cropped = await ImageCropper().cropImage(
     sourcePath: picked.path,
-    aspectRatio: CropAspectRatio(ratioX: format.width, ratioY: format.height),
     compressQuality: 90,
     uiSettings: [
       AndroidUiSettings(
@@ -201,8 +219,7 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
         toolbarWidgetColor: BT.yellow,
         activeControlsWidgetColor: BT.yellow,
         statusBarLight: false,
-        lockAspectRatio: true,
-        hideBottomControls: true, // ratio's fixed -- no reason to offer switching it
+        lockAspectRatio: false,
         showCropGrid: true,
         cropGridRowCount: 3,
         cropGridColumnCount: 3,
@@ -212,13 +229,20 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
       ),
       IOSUiSettings(
         title: 'Crop Photo',
-        aspectRatioLockEnabled: true,
-        resetAspectRatioEnabled: false,
+        aspectRatioLockEnabled: false,
+        resetAspectRatioEnabled: true,
         aspectRatioPickerButtonHidden: true,
       ),
     ],
   );
   if (cropped == null) return null; // user backed out of the crop step
+
+  // "Crop & frame your own photo" quest task -- see whats_new_service.dart.
+  // One shared call site here covers all three share screens, unlike the
+  // open/format tasks which need their own hook per screen.
+  final result = await WhatsNewService.instance.completeTask('crop_own_photo');
+  if (context.mounted) showWhatsNewFeedback(context, result);
+
   return File(cropped.path);
 }
 
@@ -248,6 +272,15 @@ Future<File?> pickBackdropPhoto(BuildContext context, {required ShareFormat form
 /// sticker already supplies its own contrast (Set's opaque slab card,
 /// Collection's translucent-but-blurred glass panel), where stacking the
 /// scrim underneath just double-darkens for no benefit.
+///
+/// The photo itself is composited with BoxFit.contain over a cream
+/// stud-textured backdrop (StudBackground, the same one FixedRatioCanvas
+/// uses for card-only mode), not BoxFit.cover -- changed 2026-08-20 for the
+/// same reason the crop step above went freeform: cover forces the photo to
+/// fill the canvas edge-to-edge, which meant the *only* way to fit a
+/// differently-shaped photo onto a fixed 9:16/4:5 canvas was to crop
+/// content away. contain shows the whole photo and lets the leftover space
+/// read as a deliberate border/mat around it instead of forcing a crop.
 class PhotoBackdropCard extends StatelessWidget {
   final File?  photo;
   final Widget card;
@@ -278,7 +311,8 @@ class PhotoBackdropCard extends StatelessWidget {
         width: format.width,
         height: format.height,
         child: Stack(fit: StackFit.expand, children: [
-          Image.file(photo!, fit: BoxFit.cover),
+          StudBackground(color: BT.cream, child: const SizedBox.expand()),
+          Image.file(photo!, fit: BoxFit.contain),
           if (scrim)
             // Full-bleed gradient so the sticker's own typography stays
             // legible against an arbitrary photo, same idea as a Story

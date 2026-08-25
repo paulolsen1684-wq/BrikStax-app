@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../utils/haptics.dart';
 import '../widgets/skeleton_loader.dart';
+import '../widgets/brik_icon.dart';
 import '../modules/community/models/community_post.dart';
 import '../modules/community/services/community_service.dart';
 import '../modules/avatar/services/dev_mode.dart';
@@ -128,8 +129,17 @@ class _CommunityFeedBodyState extends State<_CommunityFeedBody> {
     await LootService.instance.addBriks(earned);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('🧱 +$earned Brik${earned == 1 ? '' : 's'} from likes on your posts!',
-          style: BT.body(size: 13, color: BT.ink, weight: FontWeight.w700)),
+      content: Text.rich(TextSpan(
+        style: BT.body(size: 13, color: BT.ink, weight: FontWeight.w700),
+        children: [
+          const WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: BrikIcon(size: 13, animated: false),
+          ),
+          TextSpan(
+              text: ' +$earned Brik${earned == 1 ? '' : 's'} from likes on your posts!'),
+        ],
+      )),
       backgroundColor: BT.yellow,
     ));
   }
@@ -194,7 +204,7 @@ class _CommunityFeedBodyState extends State<_CommunityFeedBody> {
                         child: SkeletonBox(width: 80, height: 10),
                       ),
                       AspectRatio(
-                        aspectRatio: 4 / 3,
+                        aspectRatio: 4 / 5,
                         child: SkeletonBox(
                             borderRadius: BorderRadius.zero),
                       ),
@@ -328,11 +338,11 @@ class _PostCard extends StatelessWidget {
             ),
         ]),
       ),
-      // Every photo is cropped to 4:3 at submit time (see _pickImage), so
+      // Every photo is padded to 4:5 at submit time (see _pickImage), so
       // this AspectRatio matches what was actually saved — no re-cropping,
       // no surprise chopped edges.
       AspectRatio(
-        aspectRatio: 4 / 3,
+        aspectRatio: 4 / 5,
         child: Image.network(
           post.imageUrl,
           fit: BoxFit.cover,
@@ -547,17 +557,19 @@ class _UploadSheetState extends State<_UploadSheet> {
         source: source, maxWidth: 1600, imageQuality: 85);
     if (picked == null) return;
 
-    // Pad to 4:3 instead of cropping to it -- was a locked-aspect
-    // image_cropper step before, which forced the user to choose what part
-    // of a tall/narrow photo (e.g. a portrait phone shot) to CUT OFF to
-    // fit the box. A crop tool has no "shrink to fit and pad the rest"
-    // mode, so there was no cropper setting that could avoid losing
-    // content -- switched to compositing the whole photo onto a 4:3 canvas
-    // with solid bars filling the leftover space instead. Every feed photo
-    // still displays at a consistent 4:3 (see the AspectRatio widgets
-    // elsewhere in this file), but nothing from the original photo is ever
-    // cut off.
-    final padded = await ImageLetterbox.pad(File(picked.path));
+    // Pad to 4:5 (Instagram's real feed-post ratio) instead of cropping to
+    // it -- was a locked-aspect image_cropper step before, which forced
+    // the user to choose what part of a tall/narrow photo (e.g. a
+    // portrait phone shot) to CUT OFF to fit the box. A crop tool has no
+    // "shrink to fit and pad the rest" mode, so there was no cropper
+    // setting that could avoid losing content -- switched to compositing
+    // the whole photo onto a fixed-ratio canvas with solid bars filling
+    // the leftover space instead. Every feed photo still displays at a
+    // consistent 4:5 (see the AspectRatio widgets elsewhere in this
+    // file), but nothing from the original photo is ever cut off. Ratio
+    // changed 2026-08-22 from the original 4:3 for a proper Instagram-style
+    // portrait feed.
+    final padded = await ImageLetterbox.pad(File(picked.path), aspect: 4 / 5);
     final imageFile = padded ?? File(picked.path);
 
     // Strip EXIF/GPS metadata before this photo ever gets attached to an
@@ -679,29 +691,37 @@ class _UploadSheetState extends State<_UploadSheet> {
 
                 GestureDetector(
                   onTap: onCooldown ? null : _pickImage,
-                  child: Container(
-                    width: double.infinity,
-                    height: 180,
-                    decoration: BoxDecoration(
-                      color: bt.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: bt.cardBorder, width: BT.bw),
+                  // Fixed height:180 used to show whatever the raw picked
+                  // photo's own shape was, cropped via BoxFit.cover -- not
+                  // the actual 4:5 shape it gets padded to before posting.
+                  // AspectRatio here makes the preview genuinely match what
+                  // lands in the feed, same "no surprises" reasoning as the
+                  // feed card's own AspectRatio.
+                  child: AspectRatio(
+                    aspectRatio: 4 / 5,
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: bt.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: bt.cardBorder, width: BT.bw),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _image != null
+                          ? Image.file(_image!, fit: BoxFit.cover,
+                              width: double.infinity)
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo_outlined,
+                                    size: 32, color: bt.txMuted),
+                                const SizedBox(height: 8),
+                                Text('Tap to choose a photo',
+                                    style: BT.mono(size: 11, color: bt.tx3)),
+                              ],
+                            ),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: _image != null
-                        ? Image.file(_image!, fit: BoxFit.cover,
-                            width: double.infinity)
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_a_photo_outlined,
-                                  size: 32, color: bt.txMuted),
-                              const SizedBox(height: 8),
-                              Text('Tap to choose a photo',
-                                  style: BT.mono(size: 11, color: bt.tx3)),
-                            ],
-                          ),
                   ),
                 ),
                 const SizedBox(height: 14),

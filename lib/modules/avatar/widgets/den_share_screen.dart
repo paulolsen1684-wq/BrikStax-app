@@ -22,9 +22,10 @@ import '../../../providers/collection.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/share/photo_backdrop.dart';
 import '../../../widgets/share/brand_mark.dart';
+import '../../../services/whats_new_service.dart';
+import '../../../widgets/whats_new_banner.dart';
 import 'avatar_widget.dart';
 import '../data/backgrounds_art.dart' as bgArt;
-import 'den_hud.dart';
 import 'ground_accessory.dart';
 
 enum DenShareMode { clean, stats, trophies }
@@ -41,8 +42,17 @@ class _State extends State<DenShareScreen> {
   ShareFormat _format = ShareFormat.story;
   bool _sharing = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // "Open a share card" quest task -- see whats_new_service.dart.
+    WhatsNewService.instance.completeTask('open_share_card').then((r) {
+      if (mounted) showWhatsNewFeedback(context, r);
+    });
+  }
+
   Future<void> _pickPhoto() async {
-    final photo = await pickBackdropPhoto(context, format: _format);
+    final photo = await pickBackdropPhoto(context);
     if (photo != null) setState(() => _photo = photo);
   }
 
@@ -169,7 +179,15 @@ class _State extends State<DenShareScreen> {
             ]),
             const SizedBox(height: 12),
 
-            FormatToggle(format: _format, onChanged: (f) => setState(() => _format = f)),
+            FormatToggle(format: _format, onChanged: (f) {
+              setState(() => _format = f);
+              if (f == ShareFormat.post) {
+                // "Try the new Post format" quest task.
+                WhatsNewService.instance.completeTask('try_post_format').then((r) {
+                  if (mounted) showWhatsNewFeedback(context, r);
+                });
+              }
+            }),
             const SizedBox(height: 16),
 
             // Capturable card. FittedBox scales the card down to fit the
@@ -449,7 +467,6 @@ class _ShareCard extends StatelessWidget {
                     // snapshot, not a live animated view -- shared with
                     // den_scene.dart via ground_accessory.dart.
                     groundAccessoryWidget(accessory: acc, pxd: pxd),
-                  ...denHudWidgets(pxd: pxd, earned: earned),
                 ],
               ),
             ),
@@ -675,10 +692,13 @@ class DenPainter extends CustomPainter {
       }
     }
 
-    // Badges, trophy shelf + trophies, and the legendary_all diamond used
-    // to draw here -- moved to real images rendered as Positioned widgets
-    // (see denHudWidgets in den_hud.dart, spliced into this card's Stack
-    // in _ShareCard.build()), shared with den_scene.dart's matching swap.
+    // Badges, trophy shelf, trophies, and the legendary_all diamond used to
+    // draw here, then briefly as real PNG art (den_hud.dart's
+    // denHudWidgets) -- removed entirely 2026-08-25, same reasoning and
+    // same day as den_scene.dart's matching removal: the real-art version
+    // still read as a pixel-art sticker pasted in front of the scene, and
+    // there's no other style of this art to use instead. _denTopTrophies
+    // further down (the text/emoji trophy list) is unaffected.
 
     // showcase boxes — skipped entirely once hasImage, not just their
     // pedestal, same as den_scene.dart's matching fix: they're flat

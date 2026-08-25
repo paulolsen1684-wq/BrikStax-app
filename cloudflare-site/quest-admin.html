@@ -1,4 +1,4 @@
-<title>Quest Builder</title>
+<title>Quest Admin</title>
 <style>
   :root {
     --page-bg: #FBF9F5;
@@ -42,7 +42,7 @@
   * { box-sizing: border-box; }
   body {
     background: var(--page-bg); color: var(--page-tx); font-family: var(--f-body);
-    line-height: 1.5; padding: 0 20px 80px;
+    line-height: 1.5; padding: 0 20px 80px; margin: 0;
   }
   .wrap { max-width: 1180px; margin: 0 auto; }
   header { padding: 40px 0 24px; }
@@ -52,7 +52,7 @@
   }
   h1 {
     font-family: var(--f-display); font-weight: 800; text-transform: uppercase;
-    font-size: clamp(28px, 4vw, 38px); margin: 8px 0 10px; text-wrap: balance;
+    font-size: clamp(28px, 4vw, 38px); margin: 8px 0 10px;
   }
   header p { max-width: 640px; color: var(--page-tx2); font-size: 14.5px; }
 
@@ -72,14 +72,15 @@
     letter-spacing: .06em; text-transform: uppercase; color: var(--page-tx3);
     margin-bottom: 5px;
   }
-  input[type="text"], input[type="number"] {
+  input[type="text"], input[type="number"], input[type="password"] {
     width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--page-border);
     background: var(--page-bg); color: var(--page-tx); font-family: var(--f-body); font-size: 13.5px;
   }
   input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .field { margin-bottom: 14px; }
-  .row { display: flex; gap: 10px; }
+  .row { display: flex; gap: 10px; align-items: end; }
   .row > * { flex: 1; }
+  .row > .btn-col { flex: 0 0 auto; }
 
   .panel-note {
     font-family: var(--f-mono); font-size: 11px; color: var(--page-tx2);
@@ -117,7 +118,7 @@
   .chip.active { background: var(--accent); color: var(--bt-ink); border-color: var(--accent); font-weight: 600; }
   .toggle-row { display: flex; align-items: center; gap: 7px; font-family: var(--f-mono); font-size: 11px; color: var(--page-tx2); margin-bottom: 10px; }
 
-  .catalog-list { max-height: 340px; overflow-y: auto; border: 1px solid var(--page-border); border-radius: 10px; }
+  .catalog-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--page-border); border-radius: 10px; }
   .cat-item {
     display: flex; align-items: center; gap: 10px; padding: 9px 12px;
     border-bottom: 1px solid var(--page-border); cursor: pointer;
@@ -149,7 +150,6 @@
   }
   .selected-reward .cat-name { flex: 1; }
 
-  /* ── Preview column ─────────────────────────────────────────────── */
   .preview-sticky { position: sticky; top: 20px; }
   .device {
     width: 100%; max-width: 320px; margin: 0 auto 18px; border-radius: 26px; padding: 10px;
@@ -189,16 +189,24 @@
 
   pre {
     background: var(--bt-ink); color: #EAE6DC; border-radius: 12px; padding: 16px;
-    font-family: var(--f-mono); font-size: 12px; line-height: 1.6; overflow-x: auto;
+    font-family: var(--f-mono); font-size: 11.5px; line-height: 1.6; overflow-x: auto;
     white-space: pre-wrap; word-break: break-word;
   }
-  .code-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .copy-btn {
-    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--accent); background: transparent;
-    color: var(--accent); font-family: var(--f-mono); font-size: 11px; cursor: pointer; font-weight: 600;
+
+  .btn {
+    padding: 11px 16px; border-radius: 9px; border: 2px solid var(--bt-ink); cursor: pointer;
+    font-family: var(--f-body); font-weight: 700; font-size: 13.5px;
   }
-  .copy-btn.copied { background: var(--good); border-color: var(--good); color: white; }
-  .path-note { font-family: var(--f-mono); font-size: 10.5px; color: var(--page-tx3); }
+  .btn.primary { background: var(--bt-yellow); color: var(--bt-ink); box-shadow: 2px 2px 0 var(--bt-ink); }
+  .btn.secondary { background: var(--page-surface); color: var(--page-tx); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .status-msg {
+    margin-top: 12px; padding: 9px 12px; border-radius: 8px; font-family: var(--f-mono);
+    font-size: 11.5px; background: #E1F3E9; color: var(--good); display: none;
+  }
+  .status-msg.show { display: block; }
+  .status-msg.error { background: #FBE3D6; color: var(--danger); }
 
   .warn-banner {
     display: none; background: #FBE3D6; border: 1px solid var(--danger); color: var(--danger);
@@ -209,22 +217,31 @@
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">BrikStax · Internal Tool</div>
-    <h1>Quest Builder</h1>
-    <p>Fill in a release's What's New quest, watch it render exactly like the real popup, then copy the finished Dart snippet straight into <code>whats_new_service.dart</code>. No hand-written syntax, no guessing which cosmetic ids are already spoken for.</p>
+    <div class="eyebrow">BrikStax · Internal Tool · Not linked publicly</div>
+    <h1>Quest Admin</h1>
+    <p>Publishes a What's New quest directly to the live Worker — the app fetches whatever's here at launch, no rebuild or store submission needed. Load a version to edit it, or start fresh for a new one.</p>
   </header>
 
   <div class="grid">
     <div>
       <div class="panel">
+        <h2>Publish secret</h2>
+        <input type="password" id="secret" placeholder="x-brikstax-secret value" autocomplete="off">
+      </div>
+
+      <div class="panel">
         <h2>Release</h2>
-        <p class="panel-note">A version can have any number of published quests — each shows its intro popup exactly once per device. Give each one its own Announcement ID below, not just a version number.</p>
+        <p class="panel-note">A version can have any number of published quests — each one shows its intro popup exactly once per device, the first time that device sees it. Publishing a second quest under a version that already has one doesn't replace it; give it its own Announcement ID below.</p>
         <div class="row">
           <div class="field">
             <label class="field-label">Version — no build number (e.g. 2.3.0, not 2.3.0+9)</label>
             <input type="text" id="version" value="2.3.0">
           </div>
+          <div class="btn-col">
+            <button class="btn secondary" id="loadBtn">Load existing</button>
+          </div>
         </div>
+        <div id="loadResults"></div>
         <div class="field">
           <label class="field-label">Quest title</label>
           <input type="text" id="questTitle" value="Try the New Share Cards">
@@ -271,12 +288,14 @@
       </div>
 
       <div class="panel">
-        <h2>Generated Code</h2>
+        <h2>Publish</h2>
         <div class="warn-banner" id="reservedWarn">⚠️ Selected reward is already used elsewhere in the catalog — granting it will just pay Briks instead of unlocking anything new.</div>
-        <div class="code-actions">
-          <span class="path-note">POST payload for /whats-new</span>
-          <button class="copy-btn" id="copyBtn">Copy</button>
-        </div>
+        <button class="btn primary" id="publishBtn" style="width:100%;">Publish Live</button>
+        <div class="status-msg" id="statusMsg"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Payload (debug)</h2>
         <pre id="codeOut"></pre>
       </div>
     </div>
@@ -284,16 +303,18 @@
 </div>
 
 <script>
+const WORKER_URL = 'https://brikstax-worker.paul-olsen1684.workers.dev';
 const CATALOG = {"backgrounds":[{"id":"bg_cream","name":"Plain Cream","rarity":"common","description":"The default backdrop.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_skyline","name":"City Skyline","rarity":"common","description":"Downtown at dusk.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_garage","name":"Garage","rarity":"common","description":"Home base for builds.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_backyard","name":"Backyard","rarity":"common","description":"Where it all started.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_track","name":"Track","rarity":"common","description":"Race day.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_greenhouse","name":"Greenhouse","rarity":"uncommon","description":"Growing things, and collections.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_workshop","name":"Workshop","rarity":"uncommon","description":"Gears and grease.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_reef","name":"Reef","rarity":"uncommon","description":"Down among the coral.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_snowfield","name":"Snowfield","rarity":"uncommon","description":"Quiet and frozen.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_graveyard","name":"Graveyard","rarity":"rare","description":"Something stirs at midnight.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_spacestation","name":"Space Station","rarity":"rare","description":"Orbiting above it all.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_castlehall","name":"Castle Hall","rarity":"rare","description":"Banners and stone.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_volcano","name":"Volcano","rarity":"epic","description":"The ground itself glows.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_shadowrealm","name":"Shadow Realm","rarity":"epic","description":"Somewhere between here and there.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_prismvoid","name":"Prism Void","rarity":"legendary","description":"Every color, all at once, forever.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_meadow","name":"Meadow","rarity":"common","description":"A quiet place to spread out a build.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_pier","name":"Pier","rarity":"common","description":"Sets and salt air.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_attic","name":"Attic","rarity":"common","description":"Where the old sets live.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_carnival","name":"Carnival","rarity":"common","description":"Lights, prizes, and trades.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_desertdunes","name":"Desert Dunes","rarity":"common","description":"Dry heat, distant horizon.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_sunfadedroom","name":"Sun-Faded Room","rarity":"uncommon","description":"Light through old curtains.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_clocktower","name":"Clocktower","rarity":"uncommon","description":"Every gear in motion.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_mosswood","name":"Moss Wood","rarity":"uncommon","description":"Quiet and overgrown.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_huntinglodge","name":"Hunting Lodge","rarity":"uncommon","description":"Trophies from past hunts.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_palecrypt","name":"Pale Crypt","rarity":"rare","description":"Something rare rests here.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_sandstonetemple","name":"Sandstone Temple","rarity":"rare","description":"Ancient halls, older bricks.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_jadejungle","name":"Jade Jungle","rarity":"rare","description":"Deep green and humid.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_glaciercave","name":"Glacier Cave","rarity":"epic","description":"Blue ice, perfect silence.","isSecret":false,"reserved":true,"catalog":"background"},{"id":"bg_wraithmanor","name":"Wraith Manor","rarity":"epic","description":"Something watches from the halls.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_novaskies","name":"Nova Skies","rarity":"legendary","description":"The whole sky, lit at once.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_azurearena","name":"Azure Arena","rarity":"common","description":"Where the Azure Blade gets its practice.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_verdantgrove","name":"Verdant Grove","rarity":"common","description":"A quiet clearing for the Verdant Blade.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_emberpit","name":"Ember Pit","rarity":"uncommon","description":"The Crimson Blade runs hot here too.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_twilightring","name":"Twilight Ring","rarity":"rare","description":"The Violet Blade's favorite hour.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_twinspires","name":"Twin Spires","rarity":"epic","description":"Built for a duelist with Twin Blades.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_prismcolosseum","name":"Prism Colosseum","rarity":"legendary","description":"Every color of the Prism Blade, all at once.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_fishingdock","name":"Fishing Dock","rarity":"common","description":"The pole never leaves this spot.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_tackleshed","name":"Tackle Shed","rarity":"uncommon","description":"Every lure has its hook.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_trophypier","name":"Trophy Pier","rarity":"rare","description":"Where the Prize Catch got weighed in.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_sortingroom","name":"Sorting Room","rarity":"common","description":"The Brick Box empties out here.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_workbench","name":"Workbench","rarity":"uncommon","description":"The Sorting Tray's home base.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_inspectiondesk","name":"Inspection Desk","rarity":"rare","description":"Where the Loupe earns its keep.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_goldenhall","name":"Golden Hall","rarity":"legendary","description":"Built to display exactly one Golden Brick.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_wizardsstudy","name":"Wizard's Study","rarity":"uncommon","description":"The Spellbook's reading room.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_enchantersalcove","name":"Enchanter's Alcove","rarity":"rare","description":"The Crystal Wand hums when it's near.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_runechamber","name":"Rune Chamber","rarity":"epic","description":"The Rune Orb never stops turning here.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_observatory","name":"Observatory","rarity":"uncommon","description":"The Telescope's permanent post.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_maproom","name":"Map Room","rarity":"rare","description":"Every Star Map ever charted.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_meteorcrater","name":"Meteor Crater","rarity":"epic","description":"Where the Comet Shard actually landed.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_bathtime","name":"Bath Time","rarity":"common","description":"The Rubber Duck's natural habitat.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_coffeenook","name":"Coffee Nook","rarity":"common","description":"The Coffee Mug never actually leaves.","isSecret":false,"reserved":false,"catalog":"background"},{"id":"bg_displaycase","name":"Display Case","rarity":"rare","description":"Where the First Edition Tag stays mint.","isSecret":false,"reserved":false,"catalog":"background"}],"pixels":[{"id":"px_head_01","name":"Head 01","rarity":"common","description":null,"isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_head_02","name":"Head 02","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_hat_bucket","name":"Bucket Hat","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_hat_safari","name":"Safari Hat","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_hat_redcap","name":"Red Cap","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_hat_hardhat","name":"Hard Hat","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_hat_beanie","name":"Beanie","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_hat_skyfargoggle","name":"Skyfarer's Goggle Cap","rarity":"rare","description":"Built for reading wind currents no one else can see.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_gardensun","name":"Garden Sun Hat","rarity":"common","description":"Passed down through a family of enthusiastic backyard growers.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_sandstonewrap","name":"Sandstone Ruins Wrap","rarity":"rare","description":"Once belonged to someone who mapped ruins no map had ever shown.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_harborwatch","name":"Harbor Watch Helmet","rarity":"uncommon","description":"Scoured smooth by decades of salt spray.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_tidepoolhood","name":"Tidepool Explorer's Hood","rarity":"uncommon","description":"Damp more often than dry, and its wearer wouldn't have it any other way.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_fishermanbucket","name":"Fisherman's Bucket Hat","rarity":"common","description":"Smells like brine no matter how long it sits in the sun.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_cyclisthelmet","name":"Rookie Cyclist Helmet","rarity":"common","description":"Still has the price tag mark faintly visible under the paint.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_bakercap","name":"Baker's Cap","rarity":"common","description":"Dusted permanently with just a little too much flour.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_piratetricorn","name":"Pirate Captain's Tricorn","rarity":"uncommon","description":"Worn by someone who's never once lost a bet at sea.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_junglepith","name":"Jungle Explorer's Pith Helmet","rarity":"rare","description":"Has survived more vines and dead ends than its wearer likes to admit.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_lighthousecap","name":"Lighthouse Keeper's Cap","rarity":"uncommon","description":"Worn through countless nights watching for ships that never came.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_cityhardhat","name":"City Worker's Hard Hat","rarity":"common","description":"Dented in all the places that matter.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_piratebandana","name":"Pirate Crew Bandana","rarity":"uncommon","description":"Tied the same way it's been tied for a hundred voyages.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_wizardstar","name":"Castle Wizard's Star Hat","rarity":"rare","description":"The stars stitched on it are said to shift position when no one's watching.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_icetrooper","name":"Ice Base Trooper Helmet","rarity":"epic","description":"Rated for cold that would stop most expeditions before they started.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_spacemanhelmet","name":"Classic Spaceman Helmet","rarity":"common","description":"Standard issue for anyone brave enough to leave the launchpad.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_hat_legendarychrome","name":"Chrome Helmet","rarity":"legendary","description":"Polished so bright it doubles as a mirror on parade day.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_torso_yellowjacket","name":"Yellow Jacket","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_torso_plaid","name":"Plaid Flannel","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_torso_graysweater","name":"Gray Sweater","rarity":"common","description":null,"isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_overalls","name":"Green Overalls","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_torso_redvest","name":"Red Vest","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_torso_sandstonetunic","name":"Sandstone Ruins Tunic","rarity":"rare","description":"Sun-bleached from seasons spent somewhere the map insisted was empty.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_builderutility","name":"Builder's Utility Jacket","rarity":"common","description":"Pockets deep enough to hold a whole handful of loose pieces.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_cyclistjersey","name":"Rookie Cyclist Jersey","rarity":"common","description":"Still smells new, still a little too stiff.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_campfiresweater","name":"Campfire Sweater","rarity":"common","description":"Smells faintly of woodsmoke no matter how many times it's washed.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_tidepoolvest","name":"Tidepool Explorer's Vest","rarity":"uncommon","description":"Its pockets have held more curious little shells than anyone can remember.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_harborwatchsuit","name":"Harbor Watch Suit","rarity":"uncommon","description":"Built for someone who trusts the sea more than dry land.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_fishermanoilskin","name":"Fisherman's Oilskin Jacket","rarity":"common","description":"Waterproof in theory, character-building in practice.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_snowtrekkerparka","name":"Snow Trekker Parka","rarity":"uncommon","description":"Has weathered blizzards its owner would rather forget.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_porchcardigan","name":"Porch Sitter's Cardigan","rarity":"common","description":"Soft from years of being exactly the right amount of warm.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_bakerapron","name":"Baker's Apron","rarity":"common","description":"Never fully clean, always ready for one more batch.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_mailcarrieruniform","name":"City Mailcarrier Uniform","rarity":"common","description":"Crisp at 8 AM, a little less crisp by noon.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_cityworkervest","name":"City Worker's Vest","rarity":"common","description":"Reflective enough to be seen from three blocks away.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_lighthousecoat","name":"Lighthouse Keeper's Coat","rarity":"uncommon","description":"Heavy enough to withstand a storm that never seems to end.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_gardenoveralls","name":"Garden Overalls Top","rarity":"common","description":"Stained green at the knees from an honest day's work.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_piratecoat","name":"Pirate Captain's Coat","rarity":"uncommon","description":"Gold buttons polished, reputation slightly less so.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_piratecrewshirt","name":"Pirate Crew Shirt","rarity":"uncommon","description":"Salt-stiff and proud of it.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_knightarmor","name":"Castle Knight's Armor","rarity":"uncommon","description":"Bears a scratch from a duel that's grown taller in the retelling.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_junglevest","name":"Jungle Explorer's Vest","rarity":"rare","description":"Every pocket holds something found and nothing thrown away.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_wizardstarrobe","name":"Castle Wizard's Star Robe","rarity":"rare","description":"Its crescent moon glows the faintest bit brighter on clear nights.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_torso_icetroopersuit","name":"Ice Base Trooper Suit","rarity":"epic","description":"The frost emblem never quite melts, no matter the season.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_bluejeans","name":"Blue Jeans","rarity":"common","description":null,"isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_redpants","name":"Red Pants","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_graysweats","name":"Gray Sweatpants","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_greenshorts","name":"Green Shorts","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_harborwatch","name":"Harbor Watch Trousers","rarity":"uncommon","description":"Rivets rusted just enough to prove they've earned their keep.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_junglecargo","name":"Jungle Explorer's Cargo Trousers","rarity":"rare","description":"Every pocket holds a different half-finished field note.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_sandstone","name":"Sandstone Ruins Trousers","rarity":"rare","description":"Carry dust from ruins that most maps swear don't exist.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_cyclistshorts","name":"Rookie Cyclist Shorts","rarity":"common","description":"Still adjusting to actually being used for cycling.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_cityworker","name":"City Worker's Trousers","rarity":"common","description":"The tool loop has never once been empty.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_tidepool","name":"Tidepool Explorer's Trousers","rarity":"uncommon","description":"Rolled up just enough to keep the hems dry -- usually.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_fishermanwaders","name":"Fisherman's Waders","rarity":"common","description":"Have stood in more cold water than anyone should willingly choose to.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_snowtrekker","name":"Snow Trekker Trousers","rarity":"uncommon","description":"Never quite dries out between expeditions.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_porchslacks","name":"Porch Sitter's Slacks","rarity":"common","description":"Comfortable enough to forget you're wearing them.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_bakertrousers","name":"Baker's Trousers","rarity":"common","description":"Flour-dusted by 6 AM, every single morning.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_mailcarrier","name":"City Mailcarrier Trousers","rarity":"common","description":"Pressed each morning, rumpled by the third stop.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_wizardstar","name":"Castle Wizard's Star Trousers","rarity":"rare","description":"The single stitched star has never once faded.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_spaceman","name":"Classic Spaceman Trousers","rarity":"common","description":"Standard-issue, built to survive re-entry and then some.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_emberbattle","name":"Ember Battle Greaves","rarity":"epic","description":"Leaves a faint scorch mark on anything they brush against.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_weekenddenim2","name":"Weekend Denim","rarity":"common","description":"Faded just enough to feel like an old friend.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_campfire","name":"Campfire Trousers","rarity":"common","description":"Warm enough for chilly nights, sturdy enough for late-night marshmallow duty.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_piratecrew","name":"Pirate Crew Trousers","rarity":"uncommon","description":"Rolled up out of habit, even on dry land.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_legs_knightgreaves","name":"Castle Knight's Greaves","rarity":"uncommon","description":"Clank just loud enough to announce who's coming.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_frontierscout","name":"Frontier Scout Trousers","rarity":"uncommon","description":"Reinforced at the knee from one too many careless landings.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_legs_icetrooper","name":"Ice Base Trooper Greaves","rarity":"epic","description":"Built to keep moving long after the cold should have stopped them.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_trophy","name":"Trophy","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_brickstack","name":"Brick Stack","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_wateringcan","name":"Watering Can","rarity":"common","description":null,"isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_toolbox","name":"Toolbox","rarity":"common","description":null,"isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_harboranchor","name":"Harbor Watch Anchor","rarity":"uncommon","description":"Hasn't moved in years, and somehow still feels ready to.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_tidepoolnet","name":"Tidepool Explorer's Net","rarity":"uncommon","description":"Scooped up more curiosities than complaints.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_lighthouselamp","name":"Lighthouse Keeper's Lamp","rarity":"uncommon","description":"Its light has guided more ships home than its keeper will ever know.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_camplantern","name":"Camp Lantern","rarity":"common","description":"Lights the way back to camp long after the fire's gone out.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_alchemistcauldron","name":"Alchemist's Cauldron","rarity":"rare","description":"Bubbles occasionally, even when nothing's cooking.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_sandstonetablet","name":"Sandstone Ruins Tablet","rarity":"rare","description":"Its symbols mean something -- nobody's quite cracked what, yet.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_alchemistpotionrack","name":"Alchemist's Potion Rack","rarity":"epic","description":"Three bottles, three colors, one very firm rule about not mixing them.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_cyclistbike","name":"Rookie Cyclist's Bike","rarity":"common","description":"Still has that new-bike shine, mostly.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_fishermanbucket","name":"Fisherman's Bucket","rarity":"common","description":"Has held everything from bait to the world's luckiest catch.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_porchrocker","name":"Porch Sitter's Rocking Chair","rarity":"common","description":"Creaks in exactly the right rhythm for an afternoon nap.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_cityconestack","name":"City Worker's Cone Stack","rarity":"common","description":"Marks the spot where something is always, always under construction.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_citymailbox","name":"City Mailcarrier's Mailbox","rarity":"common","description":"Somehow always has one more letter than expected.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_pirateparrot","name":"Pirate Crew Parrot Perch","rarity":"uncommon","description":"The parrot has heard every version of every story told on this ship.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_knightbanner","name":"Castle Knight's Banner Stand","rarity":"uncommon","description":"Raised only when the cause is worth rallying behind.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_spacemanjetpack","name":"Classic Spaceman Jetpack Stand","rarity":"common","description":"Waiting patiently for the next launch window.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_farmyardhay","name":"Farmyard Hay Bale","rarity":"common","description":"A perfectly good seat, if no one else claims it first.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_piratechest","name":"Pirate Captain's Treasure Chest","rarity":"uncommon","description":"Locked tight, and everyone has their own theory about what's inside.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_junglemaptable","name":"Jungle Explorer's Map Table","rarity":"rare","description":"The map is only half-finished, and that's exactly the appeal.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_icetrooperscanner","name":"Ice Base Trooper's Scanner","rarity":"epic","description":"Still picking up readings nobody's quite figured out how to explain.","isSecret":false,"reserved":true,"catalog":"pixel"},{"id":"px_item_legendarychrome","name":"Chrome Trophy","rarity":"legendary","description":"Not for any achievement in particular -- just for having it.","isSecret":false,"reserved":false,"catalog":"pixel"},{"id":"px_item_secretxwing","name":"X-Wing Fighter","rarity":"legendary","description":"Nobody remembers unlocking this one. It was just... there, one day.","isSecret":true,"reserved":false,"catalog":"pixel"}]};
 
 // Every task's actual completion mechanism -- deliberately just ONE entry
 // today, because that's genuinely all that's wired up in the app (see
 // WhatsNewPopup._tapTask in whats_new_popup.dart: every unfinished row is
-// tappable, unconditionally, regardless of its label or id). Add a new
-// entry here (and the matching completeTask() hook in the Flutter app)
-// before a second option can ever be real -- never add one that isn't
-// backed by real app code, or a published quest could contain a task
-// that never actually completes.
+// tappable, unconditionally, regardless of its label or id). This list is
+// the single source of truth for what the dropdown below can offer -- add
+// a new entry here (and the matching completeTask() hook in the Flutter
+// app) before a second option can ever be real. Never add an option here
+// that isn't backed by real app code, or a published quest could contain
+// a task that never actually completes.
 const TASK_TYPES = [
   {
     value: 'tap_to_claim',
@@ -321,17 +342,25 @@ const TASK_TYPES = [
   },
 ];
 
+// tasks carry an explicit id, so re-publishing an edited quest never
+// silently changes a task's persistence key (which would reset players'
+// checkmarks). New tasks (added via + Add Task) start with id:null and
+// resolve to their type's value at publish time; a task loaded from a
+// live entry keeps its real id forever regardless of type/label edits.
 let tasks = [
   { id: null, type: 'tap_to_claim', label: 'Click here to earn rewards', briks: 5 },
 ];
 let selectedReward = CATALOG.backgrounds.find(c => c.id === 'bg_volcano') || null;
 let catalogFilter = 'all';
 let showReserved = false;
-// Once the id field's been touched directly, it stops auto-following the
-// Quest title -- same auto-then-locks-on-edit pattern each task's own id
-// already uses.
+// Once the id field's been touched directly (typed in, or filled by
+// Load existing), it stops auto-following the Quest title -- same
+// auto-then-locks-on-edit pattern each task's own id already uses.
 let idAutoFollowsTitle = true;
 
+function slugify(s) {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'task';
+}
 function slugifyDash(s) {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'quest';
 }
@@ -346,11 +375,11 @@ function updateIdLine() {
     ? 'Auto-generated from the title above'
     : 'Custom — won’t change if you edit the title';
 }
-
-function slugify(s) {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'task';
-}
 function taskId(t) { return t.id || t.type || slugify(t.label); }
+function escapeAttr(s) { return (s || '').replace(/"/g, '&quot;'); }
+function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function allCatalog() { return [...CATALOG.backgrounds, ...CATALOG.pixels]; }
+const RARITY_COLOR = { common: '#888888', uncommon: '#2E8B57', rare: '#1B5FA8', epic: '#7A2FBF', legendary: '#B8860B' };
 
 function renderTasks() {
   const el = document.getElementById('taskList');
@@ -409,13 +438,6 @@ function renderTasks() {
   });
 }
 
-function escapeAttr(s) { return (s || '').replace(/"/g, '&quot;'); }
-function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-
-function allCatalog() {
-  return [...CATALOG.backgrounds, ...CATALOG.pixels];
-}
-
 function renderCatalog() {
   const q = document.getElementById('rewardSearch').value.trim().toLowerCase();
   let items = allCatalog();
@@ -464,8 +486,6 @@ function renderSelectedReward() {
   `;
 }
 
-const RARITY_COLOR = { common: '#888888', uncommon: '#2E8B57', rare: '#1B5FA8', epic: '#7A2FBF', legendary: '#B8860B' };
-
 function renderPreview() {
   const questTitle = document.getElementById('questTitle').value || 'Untitled Quest';
   const popup = document.getElementById('popupPreview');
@@ -501,38 +521,31 @@ function renderPreview() {
   `;
 }
 
-// Outputs the same JSON shape quest-admin.html actually POSTs to
-// /whats-new -- this tool has no live secret/network call of its own
-// (works fully offline), so the real workflow is: compose here, copy the
-// JSON, then either paste it into quest-admin.html's fields or send it
-// directly with curl. This used to generate a WhatsNewEntry(...) Dart
-// snippet, back when the system read a hardcoded Dart list -- that list
-// was removed entirely once the system went server-driven, so the old
-// output stopped matching anything real.
-function renderCode() {
-  const id = document.getElementById('announcementId').value.trim() || 'untitled-quest';
-  const version = document.getElementById('version').value.trim() || '0.0.0';
-  const questTitle = document.getElementById('questTitle').value.trim() || 'Untitled Quest';
+function buildPayload() {
+  const announcementId = document.getElementById('announcementId').value.trim();
+  const version = document.getElementById('version').value.trim();
+  const questTitle = document.getElementById('questTitle').value.trim();
   const seenIds = {};
   const outTasks = tasks.map(t => {
-    let tid = taskId(t);
-    if (seenIds[tid]) { seenIds[tid]++; tid = tid + '_' + seenIds[tid]; } else { seenIds[tid] = 1; }
-    return { id: tid, label: t.label, briksReward: t.briks };
+    let id = taskId(t);
+    if (seenIds[id]) { seenIds[id]++; id = id + '_' + seenIds[id]; } else { seenIds[id] = 1; }
+    return { id, label: t.label, briksReward: t.briks };
   });
+  return { id: announcementId, version, questTitle, tasks: outTasks, rewardCosmeticId: selectedReward ? selectedReward.id : null };
+}
 
-  const payload = {
-    id, version, questTitle, tasks: outTasks,
-    rewardCosmeticId: selectedReward ? selectedReward.id : 'TODO_pick_a_cosmetic',
-  };
-  document.getElementById('codeOut').textContent = JSON.stringify(payload, null, 2);
-
+function renderCode() {
+  document.getElementById('codeOut').textContent = JSON.stringify(buildPayload(), null, 2);
   const warn = document.getElementById('reservedWarn');
   warn.classList.toggle('show', !!(selectedReward && (selectedReward.reserved || selectedReward.isSecret)));
 }
 
-function renderAll() {
-  renderPreview();
-  renderCode();
+function renderAll() { renderPreview(); renderCode(); }
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status-msg show' + (isError ? ' error' : '');
 }
 
 document.getElementById('addTaskBtn').addEventListener('click', () => {
@@ -560,16 +573,99 @@ document.querySelectorAll('.chip').forEach(chip => {
     renderCatalog();
   });
 });
-document.getElementById('copyBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('copyBtn');
+
+const secretInput = document.getElementById('secret');
+secretInput.value = localStorage.getItem('quest_admin_secret') || '';
+secretInput.addEventListener('input', () => localStorage.setItem('quest_admin_secret', secretInput.value));
+
+// Populates the whole form from one fetched entry -- shared by the
+// auto-load-the-only-result path and clicking a specific row in the
+// multi-result picker below.
+function loadEntryIntoForm(entry) {
+  document.getElementById('questTitle').value = entry.questTitle;
+  document.getElementById('announcementId').value = entry.id;
+  idAutoFollowsTitle = false; // this id is a real published one now, not derived
+  updateIdLine();
+  // Each task's real id is kept exactly as published (so re-publishing
+  // never resets progress) -- the Type dropdown just previews which
+  // mechanism it uses, matched by id where possible, or falling back to
+  // the first real option. This also means a task published before this
+  // dropdown existed (e.g. id 'click_to_claim') still loads and re-saves
+  // correctly even though its id doesn't match any TASK_TYPES value.
+  tasks = entry.tasks.map(t => ({
+    id: t.id,
+    type: (TASK_TYPES.find(x => x.value === t.id) || TASK_TYPES[0]).value,
+    label: t.label,
+    briks: t.briksReward,
+  }));
+  selectedReward = allCatalog().find(c => c.id === entry.rewardCosmeticId) || null;
+  document.getElementById('loadResults').innerHTML = '';
+  renderTasks(); renderCatalog(); renderSelectedReward(); renderAll();
+}
+
+document.getElementById('loadBtn').addEventListener('click', async () => {
+  const version = document.getElementById('version').value.trim();
+  if (!version) return setStatus('Enter a version first.', true);
+  setStatus('Loading…');
+  document.getElementById('loadResults').innerHTML = '';
   try {
-    await navigator.clipboard.writeText(document.getElementById('codeOut').textContent);
-    btn.textContent = 'Copied!';
-    btn.classList.add('copied');
-  } catch {
-    btn.textContent = 'Select & copy manually';
+    const res = await fetch(`${WORKER_URL}/whats-new?version=${encodeURIComponent(version)}`);
+    const data = await res.json();
+    const entries = data.entries || [];
+    if (entries.length === 0) {
+      setStatus(`No live quests found for version ${version} yet — starting fresh.`, true);
+    } else if (entries.length === 1) {
+      loadEntryIntoForm(entries[0]);
+      setStatus(`Loaded the one live quest published for version ${version}.`);
+    } else {
+      // More than one quest already exists for this version -- let the
+      // admin pick which to edit rather than guessing. Picking none and
+      // just continuing to fill in the form publishes a new one alongside
+      // these, using whatever Announcement ID is currently in that field.
+      const el = document.getElementById('loadResults');
+      el.innerHTML = `<div class="catalog-list">${entries.map((e, i) => `
+        <div class="cat-item" data-idx="${i}">
+          <div>
+            <div class="cat-name">${escapeHtml(e.questTitle)}</div>
+            <div class="cat-desc">id: ${escapeHtml(e.id)}</div>
+          </div>
+        </div>
+      `).join('')}</div>`;
+      el.querySelectorAll('.cat-item').forEach(item => {
+        item.addEventListener('click', () => loadEntryIntoForm(entries[+item.dataset.idx]));
+      });
+      setStatus(`${entries.length} quests already exist for version ${version} — pick one below to edit it.`);
+    }
+  } catch (e) {
+    setStatus('Failed to load: ' + e.message, true);
   }
-  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+});
+
+document.getElementById('publishBtn').addEventListener('click', async () => {
+  const secret = secretInput.value.trim();
+  if (!secret) return setStatus('Enter the publish secret first.', true);
+  const payload = buildPayload();
+  if (!payload.id || !payload.version || !payload.questTitle) return setStatus('Announcement ID, version, and quest title are all required.', true);
+  if (!payload.rewardCosmeticId) return setStatus('Pick a reward first.', true);
+  if (payload.tasks.some(t => !t.label.trim())) return setStatus('Every task needs a label.', true);
+
+  const btn = document.getElementById('publishBtn');
+  btn.disabled = true;
+  setStatus('Publishing…');
+  try {
+    const res = await fetch(`${WORKER_URL}/whats-new`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-brikstax-secret': secret },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401) { setStatus('Wrong publish secret.', true); return; }
+    if (!res.ok) { const t = await res.text(); setStatus('Failed: ' + t, true); return; }
+    setStatus(`✅ Published "${payload.id}" live for version ${payload.version}. The app will pick this up next launch.`);
+  } catch (e) {
+    setStatus('Failed: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 syncAnnouncementIdFromTitle();

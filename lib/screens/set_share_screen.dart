@@ -33,6 +33,9 @@ import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/share/photo_backdrop.dart';
 import '../widgets/share/brand_mark.dart';
+import '../services/whats_new_service.dart';
+import '../widgets/whats_new_banner.dart';
+import '../widgets/brik_icon.dart';
 
 enum _Variant { classicPlain, classicPhoto, productOfficial, productPhoto }
 
@@ -61,13 +64,22 @@ class _State extends State<SetShareScreen> {
   bool _sharing = false;
 
   @override
+  void initState() {
+    super.initState();
+    // "Open a share card" quest task -- see whats_new_service.dart.
+    WhatsNewService.instance.completeTask('open_share_card').then((r) {
+      if (mounted) showWhatsNewFeedback(context, r);
+    });
+  }
+
+  @override
   void dispose() {
     _pageCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _pickPhoto() async {
-    final photo = await pickBackdropPhoto(context, format: _format);
+    final photo = await pickBackdropPhoto(context);
     if (photo != null) setState(() => _photo = photo);
   }
 
@@ -143,6 +155,11 @@ class _State extends State<SetShareScreen> {
           photo: _photo,
           format: _format,
           scrim: false, // the slab is opaque -- supplies its own contrast
+          // Uncapped 2026-08-20, same fix Collection's glass sticker got:
+          // the 34%-of-canvas default was a real content downgrade here,
+          // not a deliberate compact-overlay tradeoff -- see _SlabSticker's
+          // own doc comment for what got added back.
+          capSticker: false,
           card: _SlabSticker(set: s, showDollars: _showDollars),
         );
       case _Variant.productOfficial:
@@ -244,7 +261,15 @@ class _State extends State<SetShareScreen> {
               onTap: () => setState(() => _showDollars = !_showDollars),
             ),
             const SizedBox(height: 8),
-            FormatToggle(format: _format, onChanged: (f) => setState(() => _format = f)),
+            FormatToggle(format: _format, onChanged: (f) {
+              setState(() => _format = f);
+              if (f == ShareFormat.post) {
+                // "Try the new Post format" quest task.
+                WhatsNewService.instance.completeTask('try_post_format').then((r) {
+                  if (mounted) showWhatsNewFeedback(context, r);
+                });
+              }
+            }),
           ]),
         ),
 
@@ -484,7 +509,7 @@ class _SetShareCard extends StatelessWidget {
                 color: BT.white,
                 child: set.imageUrl != null
                     ? CachedNetworkImage(imageUrl: set.imageUrl!, fit: BoxFit.contain)
-                    : const Center(child: Text('🧱', style: TextStyle(fontSize: 32))),
+                    : const Center(child: BrikIcon(size: 40, animated: false)),
               ),
             ),
             const SizedBox(width: 14),
@@ -567,6 +592,17 @@ class _SetShareCard extends StatelessWidget {
 // styling using the set's own real number rather than a fake serial. Fully
 // opaque so it supplies its own contrast against any photo (see scrim:false
 // where this is used).
+//
+// Uncapped + extended 2026-08-20 (capSticker:false at the call site) after
+// user feedback that the compact 34%-of-canvas version felt too small and
+// didn't show anything you couldn't already get from the headline row.
+// Gained its own Entry Price / Current Value / Minifigs stat block, mirrors
+// _ProductPhotoCard's field set and 🔒-when-hidden convention (reusing its
+// _statusLabel for the pill text below, not duplicating a whole extra Status
+// row -- the pill already communicates sealed/open/retired at a glance).
+// The old inline "$paid → $value" line under the name was dropped since the
+// new stat block supersedes it -- showing the same two figures twice would
+// just be clutter now that there's room to give them their own row.
 class _SlabSticker extends StatelessWidget {
   final LegoSet set;
   final bool showDollars;
@@ -576,6 +612,22 @@ class _SlabSticker extends StatelessWidget {
     if (v.abs() >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
     return v.toStringAsFixed(0);
   }
+
+  // Label:value stat row -- same shape as _ProductPhotoCard's own _statRow,
+  // restyled for a light card (ink/tx3 text) instead of that card's dark
+  // panel (white/txDim). Kept as its own copy rather than shared: the two
+  // sit on genuinely different backgrounds and Dart doesn't make cross-class
+  // style params free to override cleanly here.
+  Widget _statRow(String label, String value, {bool muted = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2.5),
+    child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label.toUpperCase(), style: BT.mono(size: 8, color: BT.tx3)),
+      Text(value,
+          style: muted
+              ? BT.mono(size: 10.5, color: BT.tx2)
+              : BT.display(size: 13, color: BT.ink)),
+    ]),
+  );
 
   static (String, Color) _grade(double? roi) {
     if (roi == null) return ('NR', BT.tx3);
@@ -589,7 +641,6 @@ class _SlabSticker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (grade, gradeColor) = _grade(set.roi);
-    final hasDollarPair = showDollars && set.paid != null && set.ebayAvg != null;
 
     return Container(
       width: 420,
@@ -627,11 +678,6 @@ class _SlabSticker extends StatelessWidget {
                     // as Collection's glass sticker): matched against the
                     // set number was hidden entirely.
                     Text('CERT NO. ${set.num}', style: BT.mono(size: 9, color: BT.tx3)),
-                    if (hasDollarPair) ...[
-                      const SizedBox(height: 1),
-                      Text('\$${_fmt(set.paid!)} → \$${_fmt(set.ebayAvg!)}',
-                          style: BT.mono(size: 8, color: BT.tx2)),
-                    ],
                   ],
                 ),
               ),
@@ -671,6 +717,25 @@ class _SlabSticker extends StatelessWidget {
               child: Text(set.status == 'sealed' ? 'SEALED' : 'OPEN',
                   style: BT.mono(size: 8, color: BT.ink)),
             ),
+          ]),
+        ),
+        // Stat block -- the actual "more info" this sticker was missing.
+        // Entry Price / Current Value follow _ProductPhotoCard's own
+        // 🔒-when-hidden convention rather than just omitting the row.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: BT.ink, width: 1.2)),
+          ),
+          child: Column(children: [
+            if (set.paid != null)
+              _statRow('Entry Price',
+                  showDollars ? '\$${_fmt(set.paid!)}' : '🔒', muted: true),
+            _statRow('Current Value', showDollars && set.ebayAvg != null
+                ? '\$${_fmt(set.ebayAvg!)}' : (set.ebayAvg != null ? '🔒' : '—')),
+            if (set.minifigs != null)
+              _statRow('Minifigs', '${set.minifigs}', muted: true),
           ]),
         ),
         Container(
