@@ -29,6 +29,9 @@ import 'utils/brik_page_route.dart';
 import 'services/widget_service.dart';
 import 'services/deep_link_service.dart';
 import 'services/local_notification_service.dart';
+import 'services/whats_new_service.dart';
+import 'services/push_service.dart';
+import 'widgets/whats_new_popup.dart';
 
 /// Flip to false to hide the Wishlist tab everywhere. Single source of truth.
 const bool kWishlistEnabled = true;
@@ -68,6 +71,7 @@ void main() async {
       await ThemeService.instance.init();
       await FeatureFlagService.instance.init();
       await DeviceIdentity.instance.init();
+      await WhatsNewService.instance.init();
 
       runApp(
         MultiProvider(
@@ -114,6 +118,31 @@ class _ShellState extends State<_Shell> {
     super.initState();
     _checkWidgetLaunch();
     _initDeepLinks();
+    _checkWhatsNew();
+    // Silent, automatic push activation -- no Settings toggle, see
+    // push_service.dart's header comment. Safe to fire-and-forget on every
+    // launch: gated behind DevMode/FeatureFlagService internally, so this
+    // is a cheap no-op for the vast majority of users until the server
+    // flag is flipped on.
+    PushService.instance.maybeAutoActivate(DeviceIdentity.instance.id);
+  }
+
+  // One-time "What's New" intro popup -- a version can have any number of
+  // published quests (see whats_new_service.dart), each shown exactly
+  // once, oldest-unseen-first, one per launch rather than all stacked in
+  // the same session. Never again once markIntroSeen() (called inside
+  // WhatsNewPopup.show itself) has recorded that specific quest's id. A
+  // quest still in progress on a later launch is surfaced by
+  // widgets/whats_new_banner.dart on the Dashboard instead of re-showing
+  // this popup every time. Runs after the widget launch/deep-link checks
+  // above so a scan/lookup/set-detail redirect from a home-screen widget
+  // still takes priority over an announcement popping up mid-navigation.
+  void _checkWhatsNew() {
+    final entry = WhatsNewService.instance.nextUnseenEntry;
+    if (entry == null || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) WhatsNewPopup.show(context, entry);
+    });
   }
 
   /// Initialize deep link listener for ongoing widget navigation during app lifetime.

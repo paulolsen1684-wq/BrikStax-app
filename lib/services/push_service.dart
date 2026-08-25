@@ -1,27 +1,33 @@
 // lib/services/push_service.dart
 //
 // Real push notifications (Firebase Cloud Messaging) -- deliberately NOT
-// initialized from main.dart's startup sequence, unlike every other
-// singleton there. Every entry point into this service (the raw dev test
-// screen AND the opt-in toggle below) is only ever reachable from a
-// DevMode.instance.isOn-gated widget (push_test_screen.dart,
-// settings.dart's _NotificationsOptIn) -- a real (non-dev) beta user's app
-// never touches Firebase code, never requests the notification permission,
-// and can't be affected if something here is misconfigured. Android only
-// for now -- no iOS Firebase app/APNs key exist yet, see
+// initialized from main.dart's sequential startup, unlike every other
+// singleton there, since maybeAutoActivate() below already short-circuits
+// before touching Firebase for anyone not gated in.
+//
+// 2026-08-26: replaced the old Settings toggle (_NotificationsOptIn) with a
+// silent, automatic activation path -- no in-app UI at all, matching how
+// camera permission works elsewhere in this app (a single OS system
+// prompt, triggered once, with no separate "enable camera" toggle
+// anywhere). See maybeAutoActivate()'s own doc comment for the gating
+// (DevMode OR FeatureFlagService's server-controlled `push_notifications`
+// flag) and main.dart's _Shell for where it's actually called. The old raw
+// dev test screen (push_test_screen.dart) is untouched -- still a manual,
+// DevMode-only debugging tool exercising these same pieces individually,
+// unrelated to the automatic path.
+//
+// Android only for now -- no iOS Firebase app/APNs key exist yet, see
 // google-services.json (Android-only client) and
 // project_future_push_notifications.md.
 //
-// "all_users" is the broadcast topic for sending to everyone at once
-// (FCM handles the fan-out server-side -- no need to loop the push_tokens
-// table for this). push_tokens itself stays for TARGETED sends later (e.g.
-// "your wishlist item hit target price," which is inherently per-user, not
-// a topic). Actually sending to either isn't implemented yet -- this only
-// gets a device INTO a state where Firebase Console's own "Send test
-// message" tool (Cloud Messaging -> a specific token, or the Topics tab for
-// "all_users") can push to it with zero server-side code. The Worker-side
-// send endpoint (using a Firebase service account key, not yet provided) is
-// a follow-up once this client side is confirmed working end-to-end.
+// "all_users" is the broadcast topic for sending to everyone at once (FCM
+// handles the fan-out server-side -- no need to loop the push_tokens table
+// for this). push_tokens itself is for TARGETED sends (e.g. "your wishlist
+// item hit target price," inherently per-user, not a topic). Sending is
+// real, not a stub -- brikstax-worker's POST /push/send (a real FCM HTTP
+// v1 call, OAuth2 JWT-signed with a Firebase service account key) already
+// ships this to lego-rewards-watcher in production; see that Worker's
+// sendBrikStaxPush() and CLAUDE.md's Push notifications section.
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -29,6 +35,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../modules/avatar/services/dev_mode.dart';
+import 'feature_flag_service.dart';
 
 class PushService extends ChangeNotifier {
   PushService._();
@@ -152,84 +159,83 @@ class PushService extends ChangeNotifier {
     }
   }
 
-  // ── Broadcast opt-in (Settings toggle, dev-gated) ──────────────────────
-  // Persisted locally so the toggle reflects reality across app restarts
-  // without re-prompting for permission every launch. Deliberately doesn't
-  // check DevMode itself -- every caller (settings.dart's
-  // _NotificationsOptIn widget) already only exists inside a
-  // DevMode.instance.isOn-gated part of the tree, so gating here too would
-  // just be redundant, not an extra safety net.
+  // ── Silent automatic activation (no toggle, no UI at all) ──────────────
+  static const String _kAutoAttemptedKey = 'push_auto_attempted_v1';
 
-  /// Call when the (dev-gated) toggle first renders, before the user has
-  /// necessarily touched it -- restores a previous opt-in silently (no
-  /// permission re-prompt, since Android/iOS both remember a prior grant)
-  /// so re-opening Settings doesn't look like it forgot the choice.
-  Future<void> restoreIfOptedIn(String userId) async {
+  /// The whole feature, end to end, with no in-app UI -- call once from
+  /// main.dart's _Shell.initState() on every launch; safe to call
+  /// unconditionally since the gate check below returns immediately for
+  /// the vast majority of users (nothing here touches Firebase, prefs, or
+  /// the network until DevMode or the server flag is actually on).
+  ///
+  /// First time ever gated in: fires the real OS permission prompt
+  /// (_requestPermissionAndGetToken -> FirebaseMessaging.requestPermission)
+  /// -- exactly one system dialog, same shape as this app's camera
+  /// permission, no separate app-level "enable notifications" question
+  /// anywhere. That attempt is recorded (_kAutoAttemptedKey) regardless of
+  /// outcome, so a real denial is respected forever after -- same as
+  /// camera, changing your mind means going to the OS's own app-permission
+  /// settings, not an in-app toggle.
+  ///
+  /// Every later launch (already attempted once): re-syncs quietly instead
+  /// -- reads the OS's already-decided permission via
+  /// getNotificationSettings() (never shows UI) and, if still authorized,
+  /// refreshes the token/topic/registration in case the token rotated.
+  /// This is what keeps a genuinely opted-in device's registration current
+  /// without ever re-prompting.
+  Future<void> maybeAutoActivate(String userId) async {
+    final gated = DevMode.instance.isOn ||
+        FeatureFlagService.instance.pushNotificationsEnabled;
+    if (!gated) return;
+
     final prefs = await SharedPreferences.getInstance();
-    _optedIn = prefs.getBool(_kOptedInKey) ?? false;
-    notifyListeners();
-    if (!_optedIn) return;
+    final alreadyAttempted = prefs.getBool(_kAutoAttemptedKey) ?? false;
 
-    final gotToken = await _requestPermissionAndGetToken();
-    if (!gotToken) {
-      // Permission was revoked in OS settings since the last time this was
-      // on -- reflect that honestly rather than claiming to still be opted
-      // in with nothing actually working underneath.
-      _optedIn = false;
-      await prefs.setBool(_kOptedInKey, false);
-      notifyListeners();
-      return;
-    }
-    await FirebaseMessaging.instance.subscribeToTopic(topicAllUsers);
-    if (DevMode.instance.isOn) {
-      await FirebaseMessaging.instance.subscribeToTopic(topicDevAlerts);
-    }
-    await registerToken(userId);
-    notifyListeners();
-  }
-
-  /// Flips the toggle. Turning on: requests permission, subscribes to the
-  /// broadcast topic, registers the token. Turning off: unsubscribes (best
-  /// effort -- OS-level permission itself can't be revoked programmatically
-  /// by the app, only the topic subscription and our own "opted in" record
-  /// can be undone). Persists either way so it survives a restart.
-  Future<void> setOptedIn(bool value, {required String userId}) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    if (value) {
+    if (!alreadyAttempted) {
       final gotToken = await _requestPermissionAndGetToken();
+      await prefs.setBool(_kAutoAttemptedKey, true);
       if (!gotToken) {
-        // Permission denied or Firebase failed to init -- don't claim
-        // opted-in when nothing underneath actually succeeded.
         _optedIn = false;
         await prefs.setBool(_kOptedInKey, false);
         notifyListeners();
         return;
       }
-      await FirebaseMessaging.instance.subscribeToTopic(topicAllUsers);
-      if (DevMode.instance.isOn) {
-        await FirebaseMessaging.instance.subscribeToTopic(topicDevAlerts);
-      }
-      await registerToken(userId);
+      await _subscribeAndRegister(userId);
       _optedIn = true;
-    } else {
-      if (_firebaseReady) {
-        try {
-          await FirebaseMessaging.instance.unsubscribeFromTopic(topicAllUsers);
-          // Unsubscribing from a topic never subscribed to is a harmless
-          // no-op on FCM's side -- always attempt this rather than
-          // re-checking DevMode.isOn, so a dev who flips DevMode off
-          // between opting in and opting out still cleanly unsubscribes.
-          await FirebaseMessaging.instance.unsubscribeFromTopic(topicDevAlerts);
-        } catch (_) {
-          // Best effort -- not being able to unsubscribe shouldn't block
-          // turning the toggle off locally.
-        }
-      }
-      _optedIn = false;
+      await prefs.setBool(_kOptedInKey, true);
+      notifyListeners();
+      return;
     }
 
-    await prefs.setBool(_kOptedInKey, _optedIn);
+    // Already asked in a previous launch -- never call requestPermission()
+    // again, just check where things actually stand and keep it in sync.
+    await ensureInitialized();
+    if (!_firebaseReady) return;
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    _permissionStatus = settings.authorizationStatus;
+    final stillAuthorized = _permissionStatus == AuthorizationStatus.authorized ||
+        _permissionStatus == AuthorizationStatus.provisional;
+    if (!stillAuthorized) {
+      // Revoked in OS settings since the last launch -- reflect that
+      // honestly rather than claiming to still be active.
+      _optedIn = false;
+      await prefs.setBool(_kOptedInKey, false);
+      notifyListeners();
+      return;
+    }
+    _token = await FirebaseMessaging.instance.getToken();
+    if (_token == null) return;
+    await _subscribeAndRegister(userId);
+    _optedIn = true;
+    await prefs.setBool(_kOptedInKey, true);
     notifyListeners();
+  }
+
+  Future<void> _subscribeAndRegister(String userId) async {
+    await FirebaseMessaging.instance.subscribeToTopic(topicAllUsers);
+    if (DevMode.instance.isOn) {
+      await FirebaseMessaging.instance.subscribeToTopic(topicDevAlerts);
+    }
+    await registerToken(userId);
   }
 }

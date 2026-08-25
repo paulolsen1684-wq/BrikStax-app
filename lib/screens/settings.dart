@@ -18,9 +18,7 @@ import 'push_test_screen.dart';
 import 'deal_history_screen.dart';
 import 'parts_merger_screen.dart';
 import 'collection_share_screen.dart';
-import '../services/push_service.dart';
 import '../services/local_notification_service.dart';
-import '../services/device_identity.dart';
 import 'package:http/http.dart' as http;
 
 class SettingsScreen extends StatefulWidget {
@@ -123,15 +121,12 @@ class _State extends State<SettingsScreen> {
           _header(bt, 'Daily Reminder'),
           const SliverToBoxAdapter(child: _DailyReminderOptIn()),
 
-          // ── Notifications ────────────────────────────────────────────────
-          // Real feature UI (not a raw test screen), but still dev-gated
-          // for now -- see push_service.dart's header comment. Once ready
-          // for everyone, this whole `if` just gets removed; nothing about
-          // the widget itself needs to change.
-          if (DevMode.instance.isOn) ...[
-            _header(bt, 'Notifications'),
-            const SliverToBoxAdapter(child: _NotificationsOptIn()),
-          ],
+          // Push (FCM) notifications have no Settings UI at all as of
+          // 2026-08-26 -- see push_service.dart's header comment. It's a
+          // silent, automatic activation (DevMode or a server-controlled
+          // feature flag gate it), matching how camera permission works
+          // elsewhere in this app: one OS system prompt, no separate
+          // in-app "enable notifications" toggle to find.
 
           // ── eBay ─────────────────────────────────────────────────────────
           _header(bt, 'eBay Prices'),
@@ -721,16 +716,11 @@ class _State extends State<SettingsScreen> {
       );
 }
 
-// ── Push notification opt-in (dev-gated for now) ───────────────────────────
-// Real toggle UI: requests the OS permission, subscribes the device to the
-// "all_users" broadcast topic, and registers the token with the Worker --
-// same underlying pieces push_test_screen.dart exercises individually for
-// debugging, wired together here as the actual one-tap flow a real user
-// would see once this ships past dev-only.
 // ── Daily Five reminder opt-in (real, non-dev-gated) ────────────────────────
 // Entirely local notifications -- no Firebase, no server round-trip, so
-// unlike _NotificationsOptIn below this ships for every user from the
-// start. Turning it on schedules today's reminder immediately (if today's
+// this ships for every user from the start (unlike push/FCM, which has no
+// Settings UI at all now -- see push_service.dart's header comment).
+// Turning it on schedules today's reminder immediately (if today's
 // tasks aren't already done); LocalNotificationService itself handles
 // canceling it the moment they are, from DailyFiveService.markDone/the
 // daily claim, not from anything in this widget.
@@ -783,68 +773,6 @@ class _DailyReminderOptInState extends State<_DailyReminderOptIn> {
             _svc.optedIn
                 ? 'On — a nudge in the evening if today\'s 5 aren\'t done yet.'
                 : 'A gentle evening nudge, only if you haven\'t checked in yet today.',
-            style: BT.mono(size: 9, color: bt.tx3),
-          ),
-          value: _svc.optedIn,
-          onChanged: _busy ? null : _toggle,
-        ),
-      ),
-    );
-  }
-}
-
-class _NotificationsOptIn extends StatefulWidget {
-  const _NotificationsOptIn();
-  @override State<_NotificationsOptIn> createState() => _NotificationsOptInState();
-}
-
-class _NotificationsOptInState extends State<_NotificationsOptIn> {
-  final _svc = PushService.instance;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _svc.addListener(_onChange);
-    // Silently restores a previous opt-in (if any) without re-prompting --
-    // see PushService.restoreIfOptedIn's own doc comment.
-    _svc.restoreIfOptedIn(DeviceIdentity.instance.id);
-  }
-
-  @override
-  void dispose() {
-    _svc.removeListener(_onChange);
-    super.dispose();
-  }
-
-  void _onChange() { if (mounted) setState(() {}); }
-
-  Future<void> _toggle(bool value) async {
-    setState(() => _busy = true);
-    await _svc.setOptedIn(value, userId: DeviceIdentity.instance.id);
-    if (mounted) setState(() => _busy = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bt = context.bt;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: bt.cardBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: bt.cardBorder, width: BT.bw),
-        ),
-        child: SwitchListTile(
-          activeColor: BT.green,
-          title: Text('Push Notifications',
-              style: BT.body(size: 14, weight: FontWeight.w700, color: bt.tx)),
-          subtitle: Text(
-            _svc.optedIn
-                ? 'On — you\'ll get restock, price, and other BrikStax alerts.'
-                : 'Get notified about restocks, price drops, and other alerts.',
             style: BT.mono(size: 9, color: bt.tx3),
           ),
           value: _svc.optedIn,

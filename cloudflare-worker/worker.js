@@ -1659,6 +1659,15 @@ var BRICKSET_SEED_DAILY_BUDGET = 500;
 var EBAY_HOST = "ebay-average-selling-price.p.rapidapi.com";
 var BRICKSET_KEY_FALLBACK = "3-Dwg8-SY9s-4VdM8";
 var RB_DISCOVERY_PAGE_SIZE = 50;
+// Cap on consecutive discovery pages walked in one runSeedBatch invocation
+// when every page keeps coming back with nothing new (e.g. paging through
+// a stretch of already-fully-seeded or pre-MIN_YEAR sets) -- added
+// 2026-08-26 so a dry spell doesn't stall discovery for good, only bounded
+// so one cron tick can't run away. Each page costs exactly one fetch() to
+// Rebrickable (rbFetch has no internal retry), so 40 stays comfortably
+// under Workers' per-invocation subrequest ceiling even before whatever
+// runSeedBatch's own BrickSet loop needs afterward.
+var MAX_DISCOVERY_ATTEMPTS_PER_RUN = 40;
 var MIN_YEAR = 2015;
 var BRICKSET_DELAY_MS = 2e3;
 var MONTHLY_CATCHUP_PAGES = 4;
@@ -1701,10 +1710,91 @@ async function handleFeatureFlags(env) {
   return json({
     community_feed: env.FEATURE_COMMUNITY_FEED === "true",
     scanner: env.FEATURE_SCANNER === "true",
-    community_banner: env.COMMUNITY_BANNER || null
+    community_banner: env.COMMUNITY_BANNER || null,
+    // Gates PushService's silent, automatic permission request (no Settings
+    // toggle -- see push_service.dart's own doc comment). Off by default so
+    // real users stay untouched by Firebase entirely; flip to "true" via
+    // `wrangler secret put` / dashboard env var, same mechanism as the two
+    // flags above, no app update needed. DevMode users get this regardless
+    // of this flag (see PushService.maybeAutoActivate).
+    push_notifications: env.FEATURE_PUSH_NOTIFICATIONS === "true"
   });
 }
 __name(handleFeatureFlags, "handleFeatureFlags");
+// Schema changed 2026-08-23: version used to be the PRIMARY KEY, meaning
+// exactly one announcement could ever exist per app version. Real user
+// feedback: "why would only one popup show per version?" -- there's no
+// good reason a release can't have multiple distinct announcements, each
+// shown once on its own. id is now the real primary key; version is a
+// plain filter column multiple rows can share. The old single-entry table
+// was dropped outright rather than migrated in place (nothing but test
+// data existed in it at the time -- this system predates any real release
+// using it).
+async function ensureWhatsNewTable(env) {
+  try {
+    await env.PRICE_CACHE.prepare(
+      "CREATE TABLE IF NOT EXISTS whats_new_quests (id TEXT PRIMARY KEY, version TEXT NOT NULL, quest_title TEXT NOT NULL, tasks_json TEXT NOT NULL, reward_cosmetic_id TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+    ).run();
+  } catch (e) {
+    console.error("ensureWhatsNewTable failed:", e.message);
+  }
+}
+__name(ensureWhatsNewTable, "ensureWhatsNewTable");
+async function handleWhatsNewGet(url, env) {
+  if (!env.PRICE_CACHE) return err("No D1 binding");
+  await ensureWhatsNewTable(env);
+  const version = url.searchParams.get("version");
+  if (!version) return err("Missing version param");
+  try {
+    const rows = await env.PRICE_CACHE.prepare(
+      "SELECT * FROM whats_new_quests WHERE version = ? ORDER BY updated_at ASC"
+    ).bind(version).all();
+    const entries = (rows.results || []).map((row) => ({
+      id: row.id,
+      version: row.version,
+      questTitle: row.quest_title,
+      tasks: JSON.parse(row.tasks_json),
+      rewardCosmeticId: row.reward_cosmetic_id,
+      updatedAt: row.updated_at
+    }));
+    return json({ entries });
+  } catch (e) {
+    return err(`DB error: ${e.message}`, 500);
+  }
+}
+__name(handleWhatsNewGet, "handleWhatsNewGet");
+async function handleWhatsNewPost(request, env) {
+  if (!env.PRICE_CACHE) return err("No D1 binding");
+  const secret = request.headers.get("x-brikstax-secret");
+  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  await ensureWhatsNewTable(env);
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return err("Invalid JSON");
+  }
+  const { id, version, questTitle, tasks, rewardCosmeticId } = body;
+  if (!id || !version || !questTitle || !Array.isArray(tasks) || tasks.length === 0 || !rewardCosmeticId) {
+    return err("Missing required field(s): id, version, questTitle, tasks (non-empty array), rewardCosmeticId");
+  }
+  try {
+    await env.PRICE_CACHE.prepare(`
+      INSERT INTO whats_new_quests (id, version, quest_title, tasks_json, reward_cosmetic_id, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        version = excluded.version,
+        quest_title = excluded.quest_title,
+        tasks_json = excluded.tasks_json,
+        reward_cosmetic_id = excluded.reward_cosmetic_id,
+        updated_at = excluded.updated_at
+    `).bind(id, version, questTitle, JSON.stringify(tasks), rewardCosmeticId, Date.now()).run();
+    return json({ ok: true });
+  } catch (e) {
+    return err(`DB error: ${e.message}`, 500);
+  }
+}
+__name(handleWhatsNewPost, "handleWhatsNewPost");
 var worker_default = {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -1714,6 +1804,8 @@ var worker_default = {
       return json({ ok: true, db: !!env.PRICE_CACHE, ts: Date.now() });
     if (path === "/features" && request.method === "GET")
       return handleFeatureFlags(env);
+    if (path === "/whats-new" && request.method === "GET") return handleWhatsNewGet(url, env);
+    if (path === "/whats-new" && request.method === "POST") return handleWhatsNewPost(request, env);
     if (path === "/parts" && request.method === "GET") return handleParts(url, env);
     if (path === "/parts-merge" && request.method === "POST") return handlePartsMerge(request, env);
     if (path === "/community/submit" && request.method === "POST") return handleCommunitySubmit(request, env, ctx);
@@ -2496,16 +2588,39 @@ async function discoverNewSets(env) {
   const progress = await env.PRICE_CACHE.prepare(
     "SELECT rb_page, rb_done FROM seed_progress WHERE id = 1"
   ).first();
+  // Real bug fixed 2026-08-26: `page` used to fall through to the
+  // pre-reset `progress.rb_page` even on the exhaustion-reset branch just
+  // above it -- the DB got rb_page=1 written, but this same call still
+  // fetched the OLD (already-exhausted, already-404ing) page number one
+  // more time before the restart actually took effect on the *next* call.
+  // Confirmed live: an exhausted run (rb_page 334) reset to 1 in the DB
+  // but still re-fetched page 334 (immediately 404ing again) instead of
+  // actually starting the fresh page-1 walk that same invocation.
+  let page = progress?.rb_page || 1;
   if (progress?.rb_done === 1) {
+    page = 1;
     await env.PRICE_CACHE.prepare(
       "UPDATE seed_progress SET rb_page = 1, rb_done = 0 WHERE id = 1"
     ).run();
   }
-  const page = progress?.rb_page || 1;
   try {
     const rbUrl = `https://rebrickable.com/api/v3/lego/sets/?ordering=-year&page_size=${RB_DISCOVERY_PAGE_SIZE}&page=${page}&min_parts=10`;
     const resp = await rbFetch(rbUrl, env);
-    if (!resp.ok) return { discovered: 0, error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      // Rebrickable's paginated endpoints (Django REST Framework) 404 once
+      // `page` exceeds the last valid page, rather than returning a 200
+      // with an empty `results` array -- treat that specific case as real
+      // exhaustion (same as the empty-results branch below), not a
+      // retryable error, or discovery would silently 404 against the same
+      // page forever without ever marking rb_done. Any other status
+      // (429/500/etc.) still surfaces as a real error so the caller stops
+      // this invocation's page-walk rather than hammering a live failure.
+      if (resp.status === 404) {
+        await env.PRICE_CACHE.prepare("UPDATE seed_progress SET rb_done = 1 WHERE id = 1").run();
+        return { discovered: 0, done: true };
+      }
+      return { discovered: 0, error: `HTTP ${resp.status}` };
+    }
     const data = await resp.json();
     const results = data.results || [];
     if (results.length === 0) {
@@ -2768,16 +2883,26 @@ async function runSeedBatch(env) {
     const queueCount = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM seed_queue").first();
     let currentQueueSize = queueCount?.cnt ?? 0;
     let attempts = 0;
-    while (currentQueueSize < DAILY_SEED_LIMIT * 2 && attempts < 3) {
+    // Keeps paging through discoverNewSets even when a page finds nothing
+    // new (discovered === 0) -- only real exhaustion (`done`) or a real
+    // fetch/parse failure (`error`) stops the walk early now. Previously
+    // bailed after the very first empty page, which meant one stretch of
+    // already-seeded/pre-MIN_YEAR sets could stall discovery indefinitely
+    // even though plenty more pages (and eventually fresh sets) were still
+    // ahead -- see MAX_DISCOVERY_ATTEMPTS_PER_RUN's own comment.
+    while (currentQueueSize < DAILY_SEED_LIMIT * 2 && attempts < MAX_DISCOVERY_ATTEMPTS_PER_RUN) {
       discoveryResult = await discoverNewSets(env);
       attempts++;
-      if (!discoveryResult || discoveryResult.done || (discoveryResult.discovered ?? 0) === 0) break;
+      if (!discoveryResult || discoveryResult.done || discoveryResult.error) break;
       const recount = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM seed_queue").first();
       currentQueueSize = recount?.cnt ?? 0;
     }
     batch = await getNextSeedBatch(env, DAILY_SEED_LIMIT);
   }
-  if (batch.length === 0) return { ok: true, seeded: 0, skipped: 0, errors: 0, processed: 0, queue_empty: true, discovery: discoveryResult, monthly_catchup: monthlyCatchup };
+  if (batch.length === 0) {
+    await env.PRICE_CACHE.prepare("UPDATE seed_progress SET last_run = ? WHERE id = 1").bind((/* @__PURE__ */ new Date()).toISOString()).run();
+    return { ok: true, seeded: 0, skipped: 0, errors: 0, processed: 0, queue_empty: true, discovery: discoveryResult, monthly_catchup: monthlyCatchup };
+  }
   let usedToday = await getBricksetUsageToday(env);
   let budgetExhausted = false;
   let seeded = 0, skipped = 0, errors = 0, processed = 0;

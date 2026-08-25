@@ -28,11 +28,15 @@ class FeatureFlagService extends ChangeNotifier {
 
   bool   _communityFeedEnabled = false;
   bool   _scannerEnabled       = false;
+  bool   _pushNotificationsEnabled = false;
   String? _communityBanner;
   bool   _loaded               = false;
 
   bool    get communityFeedEnabled => _communityFeedEnabled;
   bool    get scannerEnabled       => _scannerEnabled;
+  /// Gates PushService's silent auto-activation for real (non-dev) users --
+  /// see that file's doc comment. DevMode users bypass this flag entirely.
+  bool    get pushNotificationsEnabled => _pushNotificationsEnabled;
   /// Free-text notice for the Community feed, or null when there isn't one.
   /// Already trimmed; an empty/whitespace-only value from the Worker is
   /// treated the same as unset so a stray space in the dashboard field
@@ -51,6 +55,7 @@ class FeatureFlagService extends ChangeNotifier {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         _communityFeedEnabled = data['community_feed'] == true;
         _scannerEnabled       = data['scanner'] == true;
+        _pushNotificationsEnabled = data['push_notifications'] == true;
         final banner = (data['community_banner'] as String?)?.trim();
         _communityBanner = (banner != null && banner.isNotEmpty) ? banner : null;
       }
