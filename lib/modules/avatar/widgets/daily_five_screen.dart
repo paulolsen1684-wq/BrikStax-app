@@ -12,6 +12,7 @@ import '../data/daily_content.dart';
 import '../services/daily_five_service.dart';
 import 'daily_claim_screen.dart';
 import 'loot_roll_widget.dart';
+import '../../../widgets/brik_icon.dart';
 
 class DailyFiveScreen extends StatefulWidget {
   const DailyFiveScreen({super.key});
@@ -167,8 +168,9 @@ class _State extends State<DailyFiveScreen> {
         child: Row(children: [
           Opacity(
             opacity: done ? 0.5 : 1.0,
-            child: Text(emoji,
-                style: const TextStyle(fontSize: 26)),
+            child: emoji == '🧱'
+                ? const BrikIcon(size: 26, animated: false)
+                : Text(emoji, style: const TextStyle(fontSize: 26)),
           ),
           const SizedBox(width: 12),
           Expanded(child: Column(

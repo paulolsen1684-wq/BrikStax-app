@@ -8,6 +8,7 @@ import '../../../theme/app_theme.dart';
 import '../../../theme/app_themes.dart';
 import '../../../utils/haptics.dart';
 import '../../../services/local_notification_service.dart';
+import '../../../widgets/brik_icon.dart';
 
 class DailyClaimScreen extends StatefulWidget {
   const DailyClaimScreen({super.key});
@@ -71,8 +72,7 @@ class _State extends State<DailyClaimScreen> {
                           color: BT.yellow, width: BT.bw),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Text('🧱',
-                          style: TextStyle(fontSize: 13)),
+                      const BrikIcon(size: 15),
                       const SizedBox(width: 5),
                       Text('${svc.briks}',
                           style: BT.display(size: 15, color: bt.tx)),
@@ -154,10 +154,18 @@ class _State extends State<DailyClaimScreen> {
                       Text(_tierDescription(streak.nextTier),
                           style: BT.mono(size: 9, color: bt.tx2)),
                       const SizedBox(height: 2),
-                      Text(
-                        '+1 🧱 Brik every claim · dupes pay full value',
+                      Text.rich(TextSpan(
                         style: BT.mono(size: 8, color: bt.tx3),
-                      ),
+                        children: const [
+                          TextSpan(text: '+1 '),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.middle,
+                            child: BrikIcon(size: 10, animated: false),
+                          ),
+                          TextSpan(
+                              text: ' Brik every claim · dupes pay full value'),
+                        ],
+                      )),
                     ],
                   )),
                 ]),
@@ -240,8 +248,7 @@ class _State extends State<DailyClaimScreen> {
                   child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                    const Text('🧱',
-                        style: TextStyle(fontSize: 16)),
+                    const BrikIcon(size: 16),
                     const SizedBox(width: 8),
                     Text('Brik Shop', style: BT.body(size: 15, color: bt.tx)),
                     const SizedBox(width: 8),
@@ -338,10 +345,11 @@ class _StreakDots extends StatelessWidget {
                     width: 2,
                   ),
                 ),
-                child: Center(child: Text(
-                  reached ? '✓' : '🧱',
-                  style: const TextStyle(fontSize: 18),
-                )),
+                child: Center(
+                  child: reached
+                      ? const Text('✓', style: TextStyle(fontSize: 18))
+                      : const BrikIcon(size: 18, animated: false),
+                ),
               ),
               const SizedBox(height: 4),
               Text(labels[i],
@@ -360,7 +368,9 @@ class _StreakDots extends StatelessWidget {
   }
 }
 
-// ── Small pixel brick icon (fixed colors — it's a game element) ───────────────
+// ── Small brick icon -- border/background still hint at reward tier, the
+// icon itself is the real BrikIcon art now (2026-08-25), which has no
+// tinting support (baked-in shading) -- see brik_icon.dart's doc comment.
 class _PixelBrickIcon extends StatelessWidget {
   final BrickTier tier;
   const _PixelBrickIcon({required this.tier});
@@ -380,42 +390,6 @@ class _PixelBrickIcon extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: _color, width: 2),
     ),
-    child: CustomPaint(painter: _MiniBrickPainter(color: _color)),
+    child: const BrikIcon(size: 36),
   );
-}
-
-class _MiniBrickPainter extends CustomPainter {
-  final Color color;
-  const _MiniBrickPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..style = PaintingStyle.fill;
-    final w = size.width;
-    final h = size.height;
-    p.color = color;
-    canvas.drawRect(Rect.fromLTWH(0, h * .3, w, h * .7), p);
-    final top = Path()
-      ..moveTo(0, h * .3)
-      ..lineTo(w * .5, 0)
-      ..lineTo(w, h * .3)
-      ..lineTo(w * .5, h * .6)
-      ..close();
-    p.color = HSLColor.fromColor(color)
-        .withLightness(
-            (HSLColor.fromColor(color).lightness + .1).clamp(0.0, 1.0))
-        .toColor();
-    canvas.drawPath(top, p);
-    p.color = color.withOpacity(.6);
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(w * .5, h * .25),
-            width: w * .3,
-            height: h * .18),
-        p);
-  }
-
-  @override
-  bool shouldRepaint(covariant _MiniBrickPainter old) =>
-      old.color != color;
 }

@@ -18,6 +18,14 @@
 // happens, tuning done here doesn't affect any other screen in the app
 // (avatar_editor.dart, dashboard cards, etc. all still render the
 // un-tuned catalog defaults).
+//
+// Three tiers of control over the same offsetX/offsetY/scale, added
+// 2026-08-23: drag/pinch (coarse, finger-precision only), the D-pad/+-
+// nudge buttons below (fine, one-tap steps -- _nudgeStep/_scaleStep),
+// and the numeric text fields (exact, type any value). Added because
+// dragging can't reliably land on a specific small increment and retyping
+// a decimal value for every tiny adjustment is slow -- the nudge buttons
+// are the fast path for "a little more to the left" style iteration.
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -106,6 +114,25 @@ class _State extends State<PixelItemTunerScreen> {
   }
 
   _Ov _ovFor(String id) => _overrides.putIfAbsent(id, () => _Ov());
+
+  // One-tap step size for the D-pad/scale nudge buttons -- see this file's
+  // header doc comment for why these exist alongside drag/pinch and the
+  // numeric fields. 0.25 units lands comfortably between "drag" (coarse,
+  // several units per finger movement) and "type a value" (exact, but slow
+  // to iterate) -- small enough to nudge an item into place a step at a
+  // time, big enough that it doesn't take dozens of taps to matter.
+  static const double _nudgeStep = 0.25;
+  static const double _scaleStep = 0.02;
+
+  void _nudgeOffset(_Ov ov, double dx, double dy) {
+    setState(() { ov.offsetX += dx; ov.offsetY += dy; });
+    _persist();
+  }
+
+  void _nudgeScale(_Ov ov, double d) {
+    setState(() { ov.scale = (ov.scale + d).clamp(0.2, 4.0); });
+    _persist();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -347,34 +374,87 @@ class _State extends State<PixelItemTunerScreen> {
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: bt.cardBorder, width: BT.bw),
     ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(selected.name, style: BT.display(size: 13, color: bt.tx)),
-      const SizedBox(height: 4),
-      _numField(bt, 'offsetX', ov.offsetX, (v) => setState(() => ov.offsetX = v)),
-      _numField(bt, 'offsetY', ov.offsetY, (v) => setState(() => ov.offsetY = v)),
-      _numField(bt, 'scale',   ov.scale,   (v) => setState(() => ov.scale   = v.clamp(0.2, 4.0))),
-      Row(children: [
-        TextButton(
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          onPressed: () { setState(() { ov.offsetX = 0; ov.offsetY = 0; ov.scale = 1; }); _persist(); },
-          child: Text('Reset', style: BT.body(size: 12, color: bt.tx2, weight: FontWeight.w600)),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            'x: ${ov.offsetX.toStringAsFixed(2)}  y: ${ov.offsetY.toStringAsFixed(2)}  s: ${ov.scale.toStringAsFixed(3)}',
-            style: BT.mono(size: 9, color: bt.tx3),
-            textAlign: TextAlign.right,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ]),
+    // Row, not Column -- the D-pad/scale nudge block sits to the left of
+    // the existing name/fields/reset column instead of stacking above it,
+    // spending horizontal space (which this panel has plenty of) instead
+    // of vertical space (which the preview above is already fighting for,
+    // see this method's own long-standing "deliberately compact" comment).
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _nudgeControls(bt, ov),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(selected.name, style: BT.display(size: 13, color: bt.tx)),
+          const SizedBox(height: 4),
+          _numField(bt, 'offsetX', ov.offsetX, (v) => setState(() => ov.offsetX = v)),
+          _numField(bt, 'offsetY', ov.offsetY, (v) => setState(() => ov.offsetY = v)),
+          _numField(bt, 'scale',   ov.scale,   (v) => setState(() => ov.scale   = v.clamp(0.2, 4.0))),
+          Row(children: [
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () { setState(() { ov.offsetX = 0; ov.offsetY = 0; ov.scale = 1; }); _persist(); },
+              child: Text('Reset', style: BT.body(size: 12, color: bt.tx2, weight: FontWeight.w600)),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'x: ${ov.offsetX.toStringAsFixed(2)}  y: ${ov.offsetY.toStringAsFixed(2)}  s: ${ov.scale.toStringAsFixed(3)}',
+                style: BT.mono(size: 9, color: bt.tx3),
+                textAlign: TextAlign.right,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ]),
+        ]),
+      ),
     ]),
   );
+
+  // D-pad (offsetX/offsetY) + grow/shrink (scale) one-tap nudge buttons --
+  // see _nudgeStep/_nudgeOffset/_nudgeScale above. offsetY follows the same
+  // down-is-positive convention the drag gesture above already uses
+  // (details.focalPoint's dy), so the down arrow increases it and the up
+  // arrow decreases it, matching what dragging down/up already does.
+  Widget _nudgeControls(BrikStaxColors bt, _Ov ov) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _nudgeBtn(bt, Icons.keyboard_arrow_up, () => _nudgeOffset(ov, 0, -_nudgeStep)),
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        _nudgeBtn(bt, Icons.keyboard_arrow_left, () => _nudgeOffset(ov, -_nudgeStep, 0)),
+        const SizedBox(width: 26),
+        _nudgeBtn(bt, Icons.keyboard_arrow_right, () => _nudgeOffset(ov, _nudgeStep, 0)),
+      ]),
+      _nudgeBtn(bt, Icons.keyboard_arrow_down, () => _nudgeOffset(ov, 0, _nudgeStep)),
+      const SizedBox(height: 6),
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        _nudgeBtn(bt, Icons.remove, () => _nudgeScale(ov, -_scaleStep), tooltip: 'Shrink'),
+        const SizedBox(width: 3),
+        _nudgeBtn(bt, Icons.add, () => _nudgeScale(ov, _scaleStep), tooltip: 'Grow'),
+      ]),
+    ],
+  );
+
+  Widget _nudgeBtn(BrikStaxColors bt, IconData icon, VoidCallback onTap, {String? tooltip}) {
+    final btn = GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 26, height: 26,
+        margin: const EdgeInsets.all(1),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bt.surface,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: bt.cardBorder, width: BT.bw),
+        ),
+        child: Icon(icon, size: 15, color: bt.tx),
+      ),
+    );
+    return tooltip == null ? btn : Tooltip(message: tooltip, child: btn);
+  }
 
   Widget _numField(BrikStaxColors bt, String label, double value, void Function(double) onChanged) {
     final controller = TextEditingController(text: value.toStringAsFixed(3));

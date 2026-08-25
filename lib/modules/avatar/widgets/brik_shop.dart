@@ -4,6 +4,7 @@ import '../data/background_cosmetics.dart' as bg;
 import '../services/loot_service.dart';
 import 'loot_roll_widget.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/brik_icon.dart';
 
 /// The Brik Shop — spend Briks on a guaranteed roll of a chosen rarity.
 /// Uncommon = 2, Rare = 4, Epic = 8, Legendary = 16. Two dupes of a tier
@@ -82,7 +83,7 @@ class _BrikShopState extends State<BrikShop> {
                 borderRadius: BorderRadius.circular(100),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Text('🧱', style: TextStyle(fontSize: 13)),
+                const BrikIcon(size: 13),
                 const SizedBox(width: 6),
                 Text('${svc.briks}',
                     style: BT.display(size: 16, color: BT.yellow)),
@@ -139,9 +140,12 @@ class _BrikShopState extends State<BrikShop> {
                       border: Border.all(
                           color: enabled ? color : BT.cream3, width: 2),
                     ),
-                    child: Center(child: Text('🧱',
-                        style: TextStyle(fontSize: 18,
-                            color: enabled ? null : BT.txMuted))),
+                    child: Center(
+                      child: Opacity(
+                        opacity: enabled ? 1 : .4,
+                        child: const BrikIcon(size: 24, animated: false),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Column(
@@ -170,12 +174,19 @@ class _BrikShopState extends State<BrikShop> {
                           color: enabled ? BT.ink : BT.cream3,
                           width: BT.bw),
                     ),
-                    child: Text('🧱 $cost',
-                        style: BT.body(size: 13,
-                            color: enabled
-                                ? (rarity == bg.CosmeticRarity.legendary
-                                    ? BT.ink : Colors.white)
-                                : BT.txMuted)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Opacity(
+                        opacity: enabled ? 1 : .6,
+                        child: const BrikIcon(size: 12, animated: false),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('$cost',
+                          style: BT.body(size: 13,
+                              color: enabled
+                                  ? (rarity == bg.CosmeticRarity.legendary
+                                      ? BT.ink : Colors.white)
+                                  : BT.txMuted)),
+                    ]),
                   ),
                 ]),
               ),

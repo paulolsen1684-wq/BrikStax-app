@@ -10,6 +10,7 @@ import 'brick_den.dart';
 import 'daily_claim_screen.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/app_themes.dart';
+import '../../../widgets/brik_icon.dart';
 
 // Split from a single combined widget so the dashboard can place the
 // time-sensitive claim banner in a "things to do today" grouping and the
@@ -130,8 +131,10 @@ class MinifigPreviewCard extends StatelessWidget {
                       const SizedBox(height: 10),
                       if (earned.isNotEmpty)
                         Wrap(spacing: 4, runSpacing: 4, children: earned.reversed.take(6)
-                            .map((a) => Text(a.emoji,
-                                style: const TextStyle(fontSize: 18)))
+                            .map((a) => a.emoji == '🧱'
+                                ? const BrikIcon(size: 18, animated: false)
+                                : Text(a.emoji,
+                                    style: const TextStyle(fontSize: 18)))
                             .toList())
                       else
                         Text('Add a set to unlock your first achievement!',
@@ -195,8 +198,9 @@ class DailyBrickClaimCard extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Row(children: [
-              Text(canClaim ? '🧱' : '✅',
-                  style: const TextStyle(fontSize: 20)),
+              canClaim
+                  ? const BrikIcon(size: 20)
+                  : const Text('✅', style: TextStyle(fontSize: 20)),
               const SizedBox(width: 10),
               Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start, children: [

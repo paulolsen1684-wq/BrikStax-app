@@ -12,6 +12,7 @@ import '../services/achievement_service.dart';
 import 'avatar_widget.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/brick_burst.dart';
+import '../../../widgets/brik_icon.dart';
 
 /// Unifies a rolled reward's display info -- a roll can resolve to either
 /// catalog (bg = background, pixel = head/hat/torso/legs/item), so this
@@ -115,10 +116,6 @@ class _LootRollWidgetState extends State<LootRollWidget>
   late Animation<double>   _revealFade;
 
   bool _revealed   = false;
-  int  _flashColor = 0;
-  final _flashColors = [
-    0xFFFFCB00, 0xFF2196F3, 0xFFE53935, 0xFF66BB6A, 0xFF9C27B0,
-  ];
 
   static const double _avatarSize   = 108;
   static const double _stageHeight  = 184;
@@ -140,12 +137,6 @@ class _LootRollWidgetState extends State<LootRollWidget>
     );
     _revealFade =
         CurvedAnimation(parent: _revealCtrl, curve: Curves.easeIn);
-
-    _spinCtrl.addListener(() {
-      final idx =
-          (_spinCtrl.value * 10).toInt() % _flashColors.length;
-      if (idx != _flashColor) setState(() => _flashColor = idx);
-    });
 
     _spinCtrl.forward().then((_) {
       setState(() => _revealed = true);
@@ -251,8 +242,7 @@ class _LootRollWidgetState extends State<LootRollWidget>
                   ),
                   child: Row(
                       mainAxisSize: MainAxisSize.min, children: [
-                    const Text('🧱',
-                        style: TextStyle(fontSize: 14)),
+                    const BrikIcon(size: 14),
                     const SizedBox(width: 8),
                     Text(
                       widget.wasDupe
@@ -296,11 +286,10 @@ class _LootRollWidgetState extends State<LootRollWidget>
     return AnimatedBuilder(
       animation: _spin,
       builder: (_, __) {
-        final color = Color(_flashColors[_flashColor]);
         return Center(
           child: Transform.rotate(
             angle: _spin.value,
-            child: _PixelBrick(color: color, size: 100),
+            child: const BrikIcon(size: 100),
           ),
         );
       },
@@ -363,85 +352,7 @@ class _LootRollWidgetState extends State<LootRollWidget>
   }
 }
 
-// ── Pixel art LEGO brick (game element — fixed palette colors) ────────────────
-class _PixelBrick extends StatelessWidget {
-  final Color  color;
-  final double size;
-  const _PixelBrick({required this.color, required this.size});
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-    size: Size(size, size * .75),
-    painter: _BrickPainter(color: color),
-  );
-}
-
-class _BrickPainter extends CustomPainter {
-  final Color color;
-  const _BrickPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p     = Paint()..style = PaintingStyle.fill;
-    final w     = size.width;
-    final h     = size.height;
-    final dark  = HSLColor.fromColor(color)
-        .withLightness(
-            (HSLColor.fromColor(color).lightness - .2).clamp(0.0, 1.0))
-        .toColor();
-    final light = HSLColor.fromColor(color)
-        .withLightness(
-            (HSLColor.fromColor(color).lightness + .1).clamp(0.0, 1.0))
-        .toColor();
-
-    p.color = color;
-    canvas.drawRect(Rect.fromLTWH(0, h * .25, w, h * .75), p);
-
-    final topPath = Path()
-      ..moveTo(0,      h * .25)
-      ..lineTo(w * .5, 0)
-      ..lineTo(w,      h * .25)
-      ..lineTo(w * .5, h * .5)
-      ..close();
-    p.color = light;
-    canvas.drawPath(topPath, p);
-
-    p.color       = dark.withOpacity(.3);
-    p.style       = PaintingStyle.stroke;
-    p.strokeWidth = 1;
-    for (double x = w * .25; x < w; x += w * .25) {
-      canvas.drawLine(Offset(x, h * .25), Offset(x, h), p);
-    }
-    canvas.drawLine(Offset(0, h * .5), Offset(w, h * .5), p);
-    p.style = PaintingStyle.fill;
-
-    p.color = light;
-    for (int i = 0; i < 3; i++) {
-      final cx = w * .2 + i * w * .3;
-      final cy = h * .22;
-      canvas.drawOval(Rect.fromCenter(
-          center: Offset(cx, cy),
-          width: w * .18, height: h * .12), p);
-      p.color = color;
-      canvas.drawOval(Rect.fromCenter(
-          center: Offset(cx, cy - h * .03),
-          width: w * .12, height: h * .08), p);
-      p.color = light;
-    }
-
-    p.color       = const Color(0xFF0A0907).withOpacity(.6);
-    p.style       = PaintingStyle.stroke;
-    p.strokeWidth = 2;
-    canvas.drawRect(Rect.fromLTWH(0, h * .25, w, h * .75), p);
-    p.strokeWidth = 1.5;
-    canvas.drawPath(Path()
-      ..moveTo(0,      h * .25)
-      ..lineTo(w * .5, 0)
-      ..lineTo(w,      h * .25)
-      ..lineTo(w * .5, h * .5)
-      ..close(), p);
-  }
-
-  @override
-  bool shouldRepaint(covariant _BrickPainter old) => old.color != color;
-}
+// _PixelBrick/_BrickPainter (hand-drawn LEGO brick, flash-tinted during the
+// spin) removed 2026-08-25 -- replaced by BrikIcon's real animated art in
+// _buildSpin above. Its own shine-sweep animation replaces the flash-color
+// cycling this used to need, so _flashColor/_flashColors were also dropped.

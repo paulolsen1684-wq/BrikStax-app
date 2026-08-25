@@ -18,6 +18,7 @@ import '../services/news.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
 import '../widgets/atoms.dart';
+import '../widgets/brik_icon.dart';
 import '../widgets/set_card.dart';
 import 'set_detail.dart';
 import 'add_set.dart';
@@ -29,6 +30,7 @@ import '../modules/avatar/widgets/wishlist_dashboard_card.dart';
 import '../modules/avatar/widgets/set_lookup_card.dart';
 import '../modules/avatar/widgets/parts_checker_card.dart';
 import '../modules/avatar/data/backgrounds_art.dart' as bgArt;
+import '../widgets/whats_new_banner.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -48,6 +50,11 @@ class DashboardScreen extends StatelessWidget {
 
           // ── Hero — wordmark + one consolidated Market Value statement ────
           SliverToBoxAdapter(child: _Hero(col: col)),
+
+          // ── What's New quest banner — renders nothing once there's no
+          //    active entry (see whats_new_service.dart). Sits right below
+          //    the hero, same position the design-brainstorm mockup showed.
+          const SliverToBoxAdapter(child: WhatsNewBanner()),
 
           // ── Minifig — moved up from the bottom of the scroll (was buried
           //    after the news feed, a cramped 60px thumbnail) so the avatar
@@ -753,7 +760,7 @@ class _NewsCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(2)))),
               const SizedBox(height: 16),
               Row(children: [
-                const Text('🧱', style: TextStyle(fontSize: 14)),
+                const BrikIcon(size: 14, animated: false),
                 const SizedBox(width: 6),
                 Text('LEGO NEWS',
                     style: BT.mono(size: 9, color: bt.tx3)),
@@ -860,7 +867,7 @@ class _NewsCard extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        const Text('🧱', style: TextStyle(fontSize: 13)),
+        const BrikIcon(size: 13, animated: false),
         const SizedBox(width: 5),
         Text('LEGO NEWS', style: BT.mono(size: 8, color: bt.tx3)),
         const Spacer(),

@@ -19,6 +19,7 @@ import '../services/achievement_service.dart';
 import 'avatar_widget.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/app_themes.dart';
+import '../../../widgets/brik_icon.dart';
 
 class AchievementPopup extends StatefulWidget {
   final String       achievementId;
@@ -125,8 +126,10 @@ class _AchievementPopupState extends State<AchievementPopup>
                     style: BT.display(size: 12, color: BT.yellow)),
               ),
               const SizedBox(height: 20),
-              Text(achievement.emoji,
-                  style: const TextStyle(fontSize: 48)),
+              achievement.emoji == '🧱'
+                  ? const BrikIcon(size: 48)
+                  : Text(achievement.emoji,
+                      style: const TextStyle(fontSize: 48)),
               const SizedBox(height: 8),
               Text(achievement.name,
                   style: BT.display(size: 26),

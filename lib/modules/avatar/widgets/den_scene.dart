@@ -15,7 +15,6 @@ import '../../../theme/app_themes.dart';
 import '../services/achievement_service.dart';
 import 'avatar_widget.dart';
 import '../data/backgrounds_art.dart' as bgArt;
-import 'den_hud.dart';
 import 'ground_accessory.dart';
 import '../../../services/den_screenshot_service.dart';
 import '../../../services/widget_service.dart';
@@ -243,7 +242,6 @@ class _DenSceneContentState extends State<DenSceneContent>
               ),
               if (groundAccessoryOf(state) case final acc?)
                 groundAccessoryWidget(accessory: acc, pxd: pxd),
-              ...denHudWidgets(pxd: pxd, earned: earned),
             ]),
           ))),
 
@@ -474,12 +472,16 @@ class _DenPainter extends CustomPainter {
       dot(35, 5, accent.withOpacity(.5));
     }
 
-    // Badges, trophy shelf + trophies, and the legendary_all diamond used
-    // to draw here as blocky pixel-grid shapes -- moved to real images
-    // rendered as Positioned widgets (see denHudWidgets in den_hud.dart,
-    // spliced into this scene's Stack in DenSceneContent.build()) since
-    // those elements draw regardless of hasImage and the old flat-color
-    // version looked increasingly out of place next to real photo Den art.
+    // Badges, trophy shelf, trophies, and the legendary_all diamond used to
+    // draw here as blocky pixel-grid shapes, then briefly as real PNG art
+    // (den_hud.dart's denHudWidgets, spliced into this scene's Stack) --
+    // removed entirely 2026-08-25 rather than kept in either form: even the
+    // real-art version still read as a pixel-art sticker pasted in front of
+    // the avatar/scene rather than part of it, and there's no other style
+    // of this art to swap in. The separate trophy CARD list below the
+    // scene (see the "Trophy cards" section further down, f.emoji-based
+    // rows) is unaffected -- that's plain text/emoji, not this art, and
+    // still shows the same earned-tier info.
 
     // The showcase boxes themselves (not just their pedestal) are skipped
     // entirely once hasImage -- they're flat procedural cubes that read as

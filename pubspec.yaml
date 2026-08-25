@@ -1,7 +1,7 @@
 name: brikstax
 description: BrikStax — LEGO Collection Tracker with eBay price tracking
 publish_to: none
-version: 2.3.0+9
+version: 2.4.0+10
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -108,6 +108,8 @@ flutter:
     - assets/avatar_pixel/items/
     - assets/den_hud/
     - assets/brand/
+    - assets/blocks/
+    - assets/chestani/
 
   uses-material-design: true
 
