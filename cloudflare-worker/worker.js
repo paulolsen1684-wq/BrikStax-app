@@ -1738,31 +1738,77 @@ async function ensureWhatsNewTable(env) {
   } catch (e) {
     console.error("ensureWhatsNewTable failed:", e.message);
   }
+  // Added 2026-08-26: optional "go live" date (YYYY-MM-DD, UTC), so several
+  // quests can be authored/published ahead of time and only actually turn
+  // on once their date arrives -- see handleWhatsNewGet's filter below.
+  // NULL (every row published before this column existed, or any row
+  // where it's left blank) means "active immediately," preserving the old
+  // behavior exactly. Same ALTER-wrapped-in-try/catch shape as
+  // ensureMonthlyCatchupColumn -- SQLite errors on re-adding an existing
+  // column, so this is safe to call every time rather than needing a
+  // one-shot migration flag.
+  try {
+    await env.PRICE_CACHE.prepare(
+      "ALTER TABLE whats_new_quests ADD COLUMN active_at TEXT"
+    ).run();
+  } catch (_) {
+  }
 }
 __name(ensureWhatsNewTable, "ensureWhatsNewTable");
+function whatsNewRowToEntry(row) {
+  return {
+    id: row.id,
+    version: row.version,
+    questTitle: row.quest_title,
+    tasks: JSON.parse(row.tasks_json),
+    rewardCosmeticId: row.reward_cosmetic_id,
+    activeAt: row.active_at || null,
+    updatedAt: row.updated_at
+  };
+}
+__name(whatsNewRowToEntry, "whatsNewRowToEntry");
 async function handleWhatsNewGet(url, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
   await ensureWhatsNewTable(env);
   const version = url.searchParams.get("version");
   if (!version) return err("Missing version param");
   try {
+    // today's UTC date as YYYY-MM-DD -- ISO date strings sort/compare
+    // lexicographically the same as chronologically, so a plain <= works.
+    // NULL active_at (unset, or published before this column existed)
+    // means "always active," matching pre-scheduling behavior exactly.
+    const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const rows = await env.PRICE_CACHE.prepare(
-      "SELECT * FROM whats_new_quests WHERE version = ? ORDER BY updated_at ASC"
-    ).bind(version).all();
-    const entries = (rows.results || []).map((row) => ({
-      id: row.id,
-      version: row.version,
-      questTitle: row.quest_title,
-      tasks: JSON.parse(row.tasks_json),
-      rewardCosmeticId: row.reward_cosmetic_id,
-      updatedAt: row.updated_at
-    }));
+      "SELECT * FROM whats_new_quests WHERE version = ? AND (active_at IS NULL OR active_at <= ?) ORDER BY updated_at ASC"
+    ).bind(version, today).all();
+    const entries = (rows.results || []).map(whatsNewRowToEntry);
     return json({ entries });
   } catch (e) {
     return err(`DB error: ${e.message}`, 500);
   }
 }
 __name(handleWhatsNewGet, "handleWhatsNewGet");
+// Admin-only: every quest across every version/date, filtered by nothing --
+// powers Quest Admin's scheduled-quests list so several can be authored
+// ahead of time without losing track of what's already queued. Gated by
+// the same secret as POST since it reveals not-yet-live reward/copy
+// content, unlike the public per-version GET above.
+async function handleWhatsNewAll(request, env) {
+  if (!env.PRICE_CACHE) return err("No D1 binding");
+  const secret = request.headers.get("x-brikstax-secret");
+  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  await ensureWhatsNewTable(env);
+  try {
+    const rows = await env.PRICE_CACHE.prepare(
+      "SELECT * FROM whats_new_quests ORDER BY (active_at IS NULL) ASC, active_at ASC, updated_at ASC"
+    ).all();
+    const entries = (rows.results || []).map(whatsNewRowToEntry);
+    return json({ entries });
+  } catch (e) {
+    return err(`DB error: ${e.message}`, 500);
+  }
+}
+__name(handleWhatsNewAll, "handleWhatsNewAll");
 async function handleWhatsNewPost(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
   const secret = request.headers.get("x-brikstax-secret");
@@ -1774,21 +1820,25 @@ async function handleWhatsNewPost(request, env) {
   } catch {
     return err("Invalid JSON");
   }
-  const { id, version, questTitle, tasks, rewardCosmeticId } = body;
+  const { id, version, questTitle, tasks, rewardCosmeticId, activeAt } = body;
   if (!id || !version || !questTitle || !Array.isArray(tasks) || tasks.length === 0 || !rewardCosmeticId) {
     return err("Missing required field(s): id, version, questTitle, tasks (non-empty array), rewardCosmeticId");
   }
+  // activeAt is optional -- blank/omitted means "active immediately," same
+  // as every quest published before this field existed.
+  const activeAtValue = typeof activeAt === "string" && activeAt.trim() ? activeAt.trim() : null;
   try {
     await env.PRICE_CACHE.prepare(`
-      INSERT INTO whats_new_quests (id, version, quest_title, tasks_json, reward_cosmetic_id, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO whats_new_quests (id, version, quest_title, tasks_json, reward_cosmetic_id, active_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         version = excluded.version,
         quest_title = excluded.quest_title,
         tasks_json = excluded.tasks_json,
         reward_cosmetic_id = excluded.reward_cosmetic_id,
+        active_at = excluded.active_at,
         updated_at = excluded.updated_at
-    `).bind(id, version, questTitle, JSON.stringify(tasks), rewardCosmeticId, Date.now()).run();
+    `).bind(id, version, questTitle, JSON.stringify(tasks), rewardCosmeticId, activeAtValue, Date.now()).run();
     return json({ ok: true });
   } catch (e) {
     return err(`DB error: ${e.message}`, 500);
@@ -1806,6 +1856,7 @@ var worker_default = {
       return handleFeatureFlags(env);
     if (path === "/whats-new" && request.method === "GET") return handleWhatsNewGet(url, env);
     if (path === "/whats-new" && request.method === "POST") return handleWhatsNewPost(request, env);
+    if (path === "/whats-new/all" && request.method === "GET") return handleWhatsNewAll(request, env);
     if (path === "/parts" && request.method === "GET") return handleParts(url, env);
     if (path === "/parts-merge" && request.method === "POST") return handlePartsMerge(request, env);
     if (path === "/community/submit" && request.method === "POST") return handleCommunitySubmit(request, env, ctx);

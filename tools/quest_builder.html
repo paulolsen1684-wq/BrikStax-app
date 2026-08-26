@@ -234,6 +234,11 @@
           <input type="text" id="announcementId" value="">
           <div class="idline" id="announcementIdLine">Auto-generated from the title above</div>
         </div>
+        <div class="field">
+          <label class="field-label">Go live date (optional)</label>
+          <input type="date" id="activeAt" value="">
+          <div class="idline">Blank = live immediately on publish. Only affects the copied payload here -- this offline tool has no live schedule view, see quest-admin.html for that.</div>
+        </div>
       </div>
 
       <div class="panel">
@@ -513,6 +518,7 @@ function renderCode() {
   const id = document.getElementById('announcementId').value.trim() || 'untitled-quest';
   const version = document.getElementById('version').value.trim() || '0.0.0';
   const questTitle = document.getElementById('questTitle').value.trim() || 'Untitled Quest';
+  const activeAt = document.getElementById('activeAt').value.trim() || null;
   const seenIds = {};
   const outTasks = tasks.map(t => {
     let tid = taskId(t);
@@ -523,6 +529,7 @@ function renderCode() {
   const payload = {
     id, version, questTitle, tasks: outTasks,
     rewardCosmeticId: selectedReward ? selectedReward.id : 'TODO_pick_a_cosmetic',
+    activeAt,
   };
   document.getElementById('codeOut').textContent = JSON.stringify(payload, null, 2);
 
@@ -542,6 +549,7 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
   renderAll();
 });
 document.getElementById('version').addEventListener('input', renderAll);
+document.getElementById('activeAt').addEventListener('input', renderAll);
 document.getElementById('questTitle').addEventListener('input', () => {
   syncAnnouncementIdFromTitle();
   renderAll();

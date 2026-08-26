@@ -230,6 +230,13 @@
       </div>
 
       <div class="panel">
+        <h2>Scheduled Quests</h2>
+        <p class="panel-note">Every quest that exists, live or not yet — enter your publish secret above, then Refresh. Click any row to load it into the form below for editing. Sorted soonest-first; already-live quests (no date, or a past date) sort to the top.</p>
+        <button class="btn secondary" id="refreshScheduledBtn">Refresh</button>
+        <div id="scheduledList"></div>
+      </div>
+
+      <div class="panel">
         <h2>Release</h2>
         <p class="panel-note">A version can have any number of published quests — each one shows its intro popup exactly once per device, the first time that device sees it. Publishing a second quest under a version that already has one doesn't replace it; give it its own Announcement ID below.</p>
         <div class="row">
@@ -250,6 +257,11 @@
           <label class="field-label">Announcement ID — unique per quest, not per version</label>
           <input type="text" id="announcementId" value="">
           <div class="idline" id="announcementIdLine">Auto-generated from the title above</div>
+        </div>
+        <div class="field">
+          <label class="field-label">Go live date (optional)</label>
+          <input type="date" id="activeAt" value="">
+          <div class="idline">Blank = live immediately on publish. Set a future date to queue it up now and have it switch on by itself — nothing to remember on the day.</div>
         </div>
       </div>
 
@@ -525,13 +537,14 @@ function buildPayload() {
   const announcementId = document.getElementById('announcementId').value.trim();
   const version = document.getElementById('version').value.trim();
   const questTitle = document.getElementById('questTitle').value.trim();
+  const activeAt = document.getElementById('activeAt').value.trim() || null;
   const seenIds = {};
   const outTasks = tasks.map(t => {
     let id = taskId(t);
     if (seenIds[id]) { seenIds[id]++; id = id + '_' + seenIds[id]; } else { seenIds[id] = 1; }
     return { id, label: t.label, briksReward: t.briks };
   });
-  return { id: announcementId, version, questTitle, tasks: outTasks, rewardCosmeticId: selectedReward ? selectedReward.id : null };
+  return { id: announcementId, version, questTitle, tasks: outTasks, rewardCosmeticId: selectedReward ? selectedReward.id : null, activeAt };
 }
 
 function renderCode() {
@@ -555,6 +568,7 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
   renderAll();
 });
 document.getElementById('version').addEventListener('input', renderAll);
+document.getElementById('activeAt').addEventListener('input', renderAll);
 document.getElementById('questTitle').addEventListener('input', () => {
   syncAnnouncementIdFromTitle();
   renderAll();
@@ -584,6 +598,8 @@ secretInput.addEventListener('input', () => localStorage.setItem('quest_admin_se
 function loadEntryIntoForm(entry) {
   document.getElementById('questTitle').value = entry.questTitle;
   document.getElementById('announcementId').value = entry.id;
+  document.getElementById('version').value = entry.version;
+  document.getElementById('activeAt').value = entry.activeAt || '';
   idAutoFollowsTitle = false; // this id is a real published one now, not derived
   updateIdLine();
   // Each task's real id is kept exactly as published (so re-publishing
@@ -603,20 +619,84 @@ function loadEntryIntoForm(entry) {
   renderTasks(); renderCatalog(); renderSelectedReward(); renderAll();
 }
 
+// Today as YYYY-MM-DD (local browser date) -- purely for the "already
+// live" label below; the actual go/no-go decision is the Worker's own UTC
+// comparison in handleWhatsNewGet, this is just cosmetic.
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+async function refreshScheduledList() {
+  const el = document.getElementById('scheduledList');
+  el.innerHTML = '<div class="panel-note">Loading…</div>';
+  try {
+    const entries = await fetchAllQuests();
+    if (entries.length === 0) {
+      el.innerHTML = '<div class="panel-note">Nothing published yet.</div>';
+      return;
+    }
+    const today = todayStr();
+    el.innerHTML = `<div class="catalog-list">${entries.map((e, i) => {
+      const live = !e.activeAt || e.activeAt <= today;
+      const dateLabel = e.activeAt ? (live ? `live since ${e.activeAt}` : `goes live ${e.activeAt}`) : 'live immediately';
+      return `
+        <div class="cat-item" data-idx="${i}">
+          <div>
+            <div class="cat-name">${escapeHtml(e.questTitle)} <span style="opacity:.6;">— v${escapeHtml(e.version)}</span></div>
+            <div class="cat-desc">${live ? '🟢' : '🕒'} ${dateLabel} · id: ${escapeHtml(e.id)}</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+      `;
+    }).join('')}</div>`;
+    el.querySelectorAll('.cat-item').forEach(item => {
+      item.addEventListener('click', () => {
+        loadEntryIntoForm(entries[+item.dataset.idx]);
+        setStatus(`Loaded "${entries[+item.dataset.idx].questTitle}" for editing.`);
+        window.scrollTo({ top: document.getElementById('version').closest('.panel').offsetTop - 20, behavior: 'smooth' });
+      });
+    });
+  } catch (e) {
+    el.innerHTML = `<div class="panel-note">${escapeHtml(e.message)}</div>`;
+  }
+}
+document.getElementById('refreshScheduledBtn').addEventListener('click', refreshScheduledList);
+// Auto-load on open if a secret's already remembered, so the schedule is
+// visible immediately rather than requiring an extra click every visit.
+if (secretInput.value.trim()) refreshScheduledList();
+
+// Fetches every quest (any version, live or scheduled for later) via the
+// admin-only /whats-new/all -- used by both "Load existing" (filtered to
+// the current version field below) and the Scheduled Quests panel
+// (unfiltered). Needs the secret since this reveals not-yet-live content;
+// the public per-version GET the app itself uses can't see scheduled
+// quests at all (server-side date filter), which is exactly why this
+// tool can't just keep using that endpoint anymore.
+async function fetchAllQuests() {
+  const secret = secretInput.value.trim();
+  if (!secret) throw new Error('Enter the publish secret first.');
+  const res = await fetch(`${WORKER_URL}/whats-new/all`, {
+    headers: { 'x-brikstax-secret': secret },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.entries || [];
+}
+
 document.getElementById('loadBtn').addEventListener('click', async () => {
   const version = document.getElementById('version').value.trim();
   if (!version) return setStatus('Enter a version first.', true);
   setStatus('Loading…');
   document.getElementById('loadResults').innerHTML = '';
   try {
-    const res = await fetch(`${WORKER_URL}/whats-new?version=${encodeURIComponent(version)}`);
-    const data = await res.json();
-    const entries = data.entries || [];
+    const all = await fetchAllQuests();
+    const entries = all.filter(e => e.version === version);
     if (entries.length === 0) {
-      setStatus(`No live quests found for version ${version} yet — starting fresh.`, true);
+      setStatus(`No quests found for version ${version} yet — starting fresh.`, true);
     } else if (entries.length === 1) {
       loadEntryIntoForm(entries[0]);
-      setStatus(`Loaded the one live quest published for version ${version}.`);
+      setStatus(`Loaded the one quest found for version ${version}.`);
     } else {
       // More than one quest already exists for this version -- let the
       // admin pick which to edit rather than guessing. Picking none and
