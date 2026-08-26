@@ -1753,6 +1753,18 @@ async function ensureWhatsNewTable(env) {
     ).run();
   } catch (_) {
   }
+  // Added 2026-08-26 (same day, follow-up request): optional expiry date,
+  // same YYYY-MM-DD/UTC/NULL-means-unset shape as active_at. Multiple
+  // quests overlapping in time was already supported before this (the
+  // version filter below has never had a LIMIT 1 or any uniqueness
+  // constraint) -- ends_at just adds a second independent boundary on top,
+  // it doesn't change that several quests can satisfy both filters at once.
+  try {
+    await env.PRICE_CACHE.prepare(
+      "ALTER TABLE whats_new_quests ADD COLUMN ends_at TEXT"
+    ).run();
+  } catch (_) {
+  }
 }
 __name(ensureWhatsNewTable, "ensureWhatsNewTable");
 function whatsNewRowToEntry(row) {
@@ -1763,6 +1775,7 @@ function whatsNewRowToEntry(row) {
     tasks: JSON.parse(row.tasks_json),
     rewardCosmeticId: row.reward_cosmetic_id,
     activeAt: row.active_at || null,
+    endsAt: row.ends_at || null,
     updatedAt: row.updated_at
   };
 }
@@ -1774,13 +1787,16 @@ async function handleWhatsNewGet(url, env) {
   if (!version) return err("Missing version param");
   try {
     // today's UTC date as YYYY-MM-DD -- ISO date strings sort/compare
-    // lexicographically the same as chronologically, so a plain <= works.
-    // NULL active_at (unset, or published before this column existed)
-    // means "always active," matching pre-scheduling behavior exactly.
+    // lexicographically the same as chronologically, so a plain <=/>=
+    // works. NULL active_at/ends_at (unset, or published before these
+    // columns existed) means "no boundary on that side," matching
+    // pre-scheduling behavior exactly. No LIMIT/uniqueness here -- any
+    // number of quests can satisfy both bounds at once, so overlapping
+    // active quests keep working exactly as before this feature.
     const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
     const rows = await env.PRICE_CACHE.prepare(
-      "SELECT * FROM whats_new_quests WHERE version = ? AND (active_at IS NULL OR active_at <= ?) ORDER BY updated_at ASC"
-    ).bind(version, today).all();
+      "SELECT * FROM whats_new_quests WHERE version = ? AND (active_at IS NULL OR active_at <= ?) AND (ends_at IS NULL OR ends_at >= ?) ORDER BY updated_at ASC"
+    ).bind(version, today, today).all();
     const entries = (rows.results || []).map(whatsNewRowToEntry);
     return json({ entries });
   } catch (e) {
@@ -1820,25 +1836,30 @@ async function handleWhatsNewPost(request, env) {
   } catch {
     return err("Invalid JSON");
   }
-  const { id, version, questTitle, tasks, rewardCosmeticId, activeAt } = body;
+  const { id, version, questTitle, tasks, rewardCosmeticId, activeAt, endsAt } = body;
   if (!id || !version || !questTitle || !Array.isArray(tasks) || tasks.length === 0 || !rewardCosmeticId) {
     return err("Missing required field(s): id, version, questTitle, tasks (non-empty array), rewardCosmeticId");
   }
-  // activeAt is optional -- blank/omitted means "active immediately," same
-  // as every quest published before this field existed.
+  // Both dates are optional -- blank/omitted means "no boundary on that
+  // side," same as every quest published before these fields existed.
   const activeAtValue = typeof activeAt === "string" && activeAt.trim() ? activeAt.trim() : null;
+  const endsAtValue = typeof endsAt === "string" && endsAt.trim() ? endsAt.trim() : null;
+  if (activeAtValue && endsAtValue && endsAtValue < activeAtValue) {
+    return err("End date can't be before the go-live date -- this quest would never show.");
+  }
   try {
     await env.PRICE_CACHE.prepare(`
-      INSERT INTO whats_new_quests (id, version, quest_title, tasks_json, reward_cosmetic_id, active_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO whats_new_quests (id, version, quest_title, tasks_json, reward_cosmetic_id, active_at, ends_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         version = excluded.version,
         quest_title = excluded.quest_title,
         tasks_json = excluded.tasks_json,
         reward_cosmetic_id = excluded.reward_cosmetic_id,
         active_at = excluded.active_at,
+        ends_at = excluded.ends_at,
         updated_at = excluded.updated_at
-    `).bind(id, version, questTitle, JSON.stringify(tasks), rewardCosmeticId, activeAtValue, Date.now()).run();
+    `).bind(id, version, questTitle, JSON.stringify(tasks), rewardCosmeticId, activeAtValue, endsAtValue, Date.now()).run();
     return json({ ok: true });
   } catch (e) {
     return err(`DB error: ${e.message}`, 500);

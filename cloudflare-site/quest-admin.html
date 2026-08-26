@@ -258,10 +258,17 @@
           <input type="text" id="announcementId" value="">
           <div class="idline" id="announcementIdLine">Auto-generated from the title above</div>
         </div>
-        <div class="field">
-          <label class="field-label">Go live date (optional)</label>
-          <input type="date" id="activeAt" value="">
-          <div class="idline">Blank = live immediately on publish. Set a future date to queue it up now and have it switch on by itself — nothing to remember on the day.</div>
+        <div class="row">
+          <div class="field">
+            <label class="field-label">Go live date (optional)</label>
+            <input type="date" id="activeAt" value="">
+            <div class="idline">Blank = live immediately.</div>
+          </div>
+          <div class="field">
+            <label class="field-label">Ends date (optional)</label>
+            <input type="date" id="endsAt" value="">
+            <div class="idline">Blank = never expires. Multiple quests can overlap freely — this doesn't limit anything else that's live at the same time.</div>
+          </div>
         </div>
       </div>
 
@@ -538,13 +545,14 @@ function buildPayload() {
   const version = document.getElementById('version').value.trim();
   const questTitle = document.getElementById('questTitle').value.trim();
   const activeAt = document.getElementById('activeAt').value.trim() || null;
+  const endsAt = document.getElementById('endsAt').value.trim() || null;
   const seenIds = {};
   const outTasks = tasks.map(t => {
     let id = taskId(t);
     if (seenIds[id]) { seenIds[id]++; id = id + '_' + seenIds[id]; } else { seenIds[id] = 1; }
     return { id, label: t.label, briksReward: t.briks };
   });
-  return { id: announcementId, version, questTitle, tasks: outTasks, rewardCosmeticId: selectedReward ? selectedReward.id : null, activeAt };
+  return { id: announcementId, version, questTitle, tasks: outTasks, rewardCosmeticId: selectedReward ? selectedReward.id : null, activeAt, endsAt };
 }
 
 function renderCode() {
@@ -569,6 +577,7 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
 });
 document.getElementById('version').addEventListener('input', renderAll);
 document.getElementById('activeAt').addEventListener('input', renderAll);
+document.getElementById('endsAt').addEventListener('input', renderAll);
 document.getElementById('questTitle').addEventListener('input', () => {
   syncAnnouncementIdFromTitle();
   renderAll();
@@ -600,6 +609,7 @@ function loadEntryIntoForm(entry) {
   document.getElementById('announcementId').value = entry.id;
   document.getElementById('version').value = entry.version;
   document.getElementById('activeAt').value = entry.activeAt || '';
+  document.getElementById('endsAt').value = entry.endsAt || '';
   idAutoFollowsTitle = false; // this id is a real published one now, not derived
   updateIdLine();
   // Each task's real id is kept exactly as published (so re-publishing
@@ -637,14 +647,26 @@ async function refreshScheduledList() {
       return;
     }
     const today = todayStr();
+    // Three states now instead of two: started/ended are independent
+    // boundaries, so a quest can be upcoming, live, or ended -- overlap
+    // with any other quest is unaffected either way, this is purely per-row.
     el.innerHTML = `<div class="catalog-list">${entries.map((e, i) => {
-      const live = !e.activeAt || e.activeAt <= today;
-      const dateLabel = e.activeAt ? (live ? `live since ${e.activeAt}` : `goes live ${e.activeAt}`) : 'live immediately';
+      const started = !e.activeAt || e.activeAt <= today;
+      const ended = !!(e.endsAt && e.endsAt < today);
+      let icon, dateLabel;
+      if (ended) {
+        icon = '⚫'; dateLabel = `ended ${e.endsAt}`;
+      } else if (!started) {
+        icon = '🕒'; dateLabel = `goes live ${e.activeAt}` + (e.endsAt ? `, ends ${e.endsAt}` : '');
+      } else {
+        icon = '🟢';
+        dateLabel = (e.activeAt ? `live since ${e.activeAt}` : 'live immediately') + (e.endsAt ? `, ends ${e.endsAt}` : '');
+      }
       return `
         <div class="cat-item" data-idx="${i}">
           <div>
             <div class="cat-name">${escapeHtml(e.questTitle)} <span style="opacity:.6;">— v${escapeHtml(e.version)}</span></div>
-            <div class="cat-desc">${live ? '🟢' : '🕒'} ${dateLabel} · id: ${escapeHtml(e.id)}</div>
+            <div class="cat-desc">${icon} ${dateLabel} · id: ${escapeHtml(e.id)}</div>
           </div>
           <span class="chev">›</span>
         </div>
@@ -728,6 +750,7 @@ document.getElementById('publishBtn').addEventListener('click', async () => {
   if (!payload.id || !payload.version || !payload.questTitle) return setStatus('Announcement ID, version, and quest title are all required.', true);
   if (!payload.rewardCosmeticId) return setStatus('Pick a reward first.', true);
   if (payload.tasks.some(t => !t.label.trim())) return setStatus('Every task needs a label.', true);
+  if (payload.activeAt && payload.endsAt && payload.endsAt < payload.activeAt) return setStatus("End date can't be before the go-live date — this quest would never show.", true);
 
   const btn = document.getElementById('publishBtn');
   btn.disabled = true;
