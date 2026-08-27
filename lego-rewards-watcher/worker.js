@@ -178,6 +178,21 @@ function sleep(ms) {
 }
 __name(sleep, "sleep");
 __name2(sleep, "sleep");
+// Real bug fixed 2026-08-27: every link this Worker ever built used
+// `/en-us/insiders/rewards/{slug}` with just the reward's urlTitleSlug --
+// wrong path (should be the singular `/en-us/reward/`) and missing a
+// required id suffix on the slug itself (confirmed against a real working
+// link: ".../reward/stranger-things-sketchbook-na-0fbbc5tk78", not
+// ".../insiders/rewards/stranger-things-sketchbook-na"). The GraphQL query
+// already fetches `rewardId` for exactly this, it just never got used
+// anywhere -- every link sent in an alert or shown on /status has been
+// wrong since this Worker existed. Falls back to the bare slug (no
+// trailing dash) if rewardId is ever missing, rather than baking a literal
+// "undefined" into the URL.
+function rewardUrl(slug, rewardId) {
+  return `https://www.lego.com/en-us/reward/${slug}${rewardId ? `-${rewardId}` : ""}`;
+}
+__name(rewardUrl, "rewardUrl");
 async function fetchRewardsPage(env, page) {
   const res = await fetch(GRAPHQL_ENDPOINT, {
     method: "POST",
@@ -256,9 +271,11 @@ async function runCheck(env) {
       restrictedInCountry: r.restrictedInCountry,
       new: r.new,
       slug: r.urlTitleSlug,
+      rewardId: r.rewardId,
       endDate: r.endDate
     };
   }
+  await backfillHistoryRewardIds(env, current);
   const previousRaw = await env.REWARDS_KV.get(SNAPSHOT_KEY);
   const previous = previousRaw ? JSON.parse(previousRaw) : {};
   const isBaseline = previousRaw === null;
@@ -278,7 +295,7 @@ async function runCheck(env) {
     // No link for a lone "removed" notification -- that reward's own page
     // will most likely 404 once it's delisted, so there's nothing useful
     // to click through to.
-    const clickUrl = notifyWorthy.length === 1 && notifyWorthy[0].kind !== "removed" ? `https://www.lego.com/en-us/insiders/rewards/${notifyWorthy[0].after.slug}` : void 0;
+    const clickUrl = notifyWorthy.length === 1 && notifyWorthy[0].kind !== "removed" ? rewardUrl(notifyWorthy[0].after.slug, notifyWorthy[0].after.rewardId) : void 0;
     await postDiscord(env, message);
     const emailResult = await sendEmail(env, title, message);
     if (!emailResult.ok) {
@@ -294,7 +311,7 @@ async function runCheck(env) {
     await storeExpiringHistory(env, expiringItems, rewards);
     const expiringMessage = formatExpiringItems(expiringItems);
     const expiringTitle = `LEGO Rewards: ${expiringItems.length} item${expiringItems.length > 1 ? "s" : ""} expiring soon`;
-    const expiringClickUrl = expiringItems.length === 1 ? `https://www.lego.com/en-us/insiders/rewards/${expiringItems[0].slug}` : void 0;
+    const expiringClickUrl = expiringItems.length === 1 ? rewardUrl(expiringItems[0].slug, expiringItems[0].rewardId) : void 0;
     await postDiscord(env, expiringMessage);
     const emailResult = await sendEmail(env, expiringTitle, expiringMessage);
     if (!emailResult.ok) {
@@ -403,7 +420,7 @@ function formatChanges(changes) {
     if (c.kind === "removed") {
       return `\u{1F5D1}️ Removed from rewards: **${c.before.title}** — was ${c.before.pointValue} pts`;
     }
-    const url = `https://www.lego.com/en-us/insiders/rewards/${c.after.slug}`;
+    const url = rewardUrl(c.after.slug, c.after.rewardId);
     const expiration = c.after.endDate ? ` — expires ${new Date(c.after.endDate).toLocaleDateString()}` : "";
     if (c.kind === "added") {
       return `\u{1F195} New reward listed: **${c.after.title}** — ${c.after.pointValue} pts, qty ${c.after.quantity ?? "—"}${expiration}
@@ -419,7 +436,7 @@ __name(formatChanges, "formatChanges");
 __name2(formatChanges, "formatChanges");
 function formatExpiringItems(items) {
   const lines = items.map((item) => {
-    const url = `https://www.lego.com/en-us/insiders/rewards/${item.slug}`;
+    const url = rewardUrl(item.slug, item.rewardId);
     const expiresDate = new Date(item.endDate);
     const daysLeft = Math.ceil((expiresDate - Date.now()) / (24 * 60 * 60 * 1e3));
     return `⏰ **${item.title}** — ${item.pointValue} pts, expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""} (${expiresDate.toLocaleDateString()})
@@ -558,6 +575,7 @@ async function storeChanges(env, changes, rewards) {
       id: change.id,
       title: change.after?.title || change.before?.title,
       slug: change.after?.slug || change.before?.slug,
+      rewardId: change.after?.rewardId || change.before?.rewardId,
       imageUrl,
       kind: change.kind,
       timestamp: Date.now(),
@@ -571,6 +589,32 @@ async function storeChanges(env, changes, rewards) {
   await env.REWARDS_KV.put(CHANGES_KEY, JSON.stringify(history));
 }
 __name(storeChanges, "storeChanges");
+// One-time-per-entry backfill, added 2026-08-27 alongside the rewardId
+// link fix: every history entry stored before that fix has no rewardId at
+// all (it didn't exist as a tracked field yet), and storeChanges/
+// storeExpiringHistory only ever touch an entry again if that specific
+// reward has a NEW change -- for anything that doesn't restock/expire
+// again, its /status link would stay broken indefinitely otherwise. Runs
+// every check, but each entry only gets rewritten once (skips anything
+// that already has rewardId), so this is cheap after the first pass.
+async function backfillHistoryRewardIds(env, current) {
+  const historyRaw = await env.REWARDS_KV.get(CHANGES_KEY);
+  if (!historyRaw) return;
+  const history = JSON.parse(historyRaw);
+  let changed = false;
+  for (const entry of history) {
+    if (entry.rewardId) continue;
+    const live = current[entry.id];
+    if (live?.rewardId) {
+      entry.rewardId = live.rewardId;
+      changed = true;
+    }
+  }
+  if (changed) {
+    await env.REWARDS_KV.put(CHANGES_KEY, JSON.stringify(history));
+  }
+}
+__name(backfillHistoryRewardIds, "backfillHistoryRewardIds");
 __name2(storeChanges, "storeChanges");
 // "Expiring soon" alerts (getExpiringItems) were always a completely
 // separate path from diff()/storeChanges -- never written into
@@ -590,6 +634,7 @@ async function storeExpiringHistory(env, expiringItems, rewards) {
       id: item.id,
       title: item.title,
       slug: item.slug,
+      rewardId: item.rewardId,
       imageUrl,
       kind: "expiring",
       timestamp: Date.now(),
@@ -782,7 +827,7 @@ async function handleStatus(env) {
       badgeText = "⏳ Expiring Soon";
     }
     const isRemoved = item.kind === "removed";
-    const url = `https://www.lego.com/en-us/insiders/rewards/${item.slug}`;
+    const url = rewardUrl(item.slug, item.rewardId);
     let metaLine;
     if (item.kind === "changed") {
       metaLine = `<span>qty: ${item.beforeQty} → <strong>${item.afterQty}</strong></span>`;
