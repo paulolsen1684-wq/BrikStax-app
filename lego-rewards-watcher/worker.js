@@ -275,7 +275,10 @@ async function runCheck(env) {
   if (notifyWorthy.length) {
     const message = formatChanges(notifyWorthy);
     const title = `LEGO Rewards: ${notifyWorthy.length} update${notifyWorthy.length > 1 ? "s" : ""}`;
-    const clickUrl = notifyWorthy.length === 1 ? `https://www.lego.com/en-us/insiders/rewards/${notifyWorthy[0].after.slug}` : void 0;
+    // No link for a lone "removed" notification -- that reward's own page
+    // will most likely 404 once it's delisted, so there's nothing useful
+    // to click through to.
+    const clickUrl = notifyWorthy.length === 1 && notifyWorthy[0].kind !== "removed" ? `https://www.lego.com/en-us/insiders/rewards/${notifyWorthy[0].after.slug}` : void 0;
     await postDiscord(env, message);
     const emailResult = await sendEmail(env, title, message);
     if (!emailResult.ok) {
@@ -288,6 +291,7 @@ async function runCheck(env) {
   }
   const expiringItems = isBaseline ? [] : getExpiringItems(current, previous);
   if (expiringItems.length) {
+    await storeExpiringHistory(env, expiringItems, rewards);
     const expiringMessage = formatExpiringItems(expiringItems);
     const expiringTitle = `LEGO Rewards: ${expiringItems.length} item${expiringItems.length > 1 ? "s" : ""} expiring soon`;
     const expiringClickUrl = expiringItems.length === 1 ? `https://www.lego.com/en-us/insiders/rewards/${expiringItems[0].slug}` : void 0;
@@ -320,6 +324,7 @@ __name(runCheck, "runCheck");
 __name2(runCheck, "runCheck");
 function isNotifyWorthy(change) {
   if (change.kind === "added") return true;
+  if (change.kind === "removed") return true;
   if (change.kind === "changed") {
     if (change.before.quantity === 0 && change.after.quantity !== 0) return true;
     if (change.after.endDate && !change.before.endDate) {
@@ -390,6 +395,14 @@ __name(diff, "diff");
 __name2(diff, "diff");
 function formatChanges(changes) {
   const lines = changes.map((c) => {
+    // "removed" only ever has `before` (the item is gone from the current
+    // fetch by definition -- that's what makes it "removed") -- handled
+    // first and separately since every other branch here assumes `c.after`
+    // exists, which would throw for this kind. No link included since the
+    // reward's own page will most likely 404 once it's delisted.
+    if (c.kind === "removed") {
+      return `\u{1F5D1}️ Removed from rewards: **${c.before.title}** — was ${c.before.pointValue} pts`;
+    }
     const url = `https://www.lego.com/en-us/insiders/rewards/${c.after.slug}`;
     const expiration = c.after.endDate ? ` — expires ${new Date(c.after.endDate).toLocaleDateString()}` : "";
     if (c.kind === "added") {
@@ -466,9 +479,11 @@ __name2(sendBrikStaxPush, "sendBrikStaxPush");
 function compactChangesBody(notifyWorthy) {
   if (notifyWorthy.length === 1) {
     const c = notifyWorthy[0];
+    if (c.kind === "removed") return `${c.before.title} — removed from rewards`;
     return c.kind === "added" ? `${c.after.title} — ${c.after.pointValue} pts, qty ${c.after.quantity ?? "—"}` : `${c.after.title} — back in stock (qty ${c.before.quantity} → ${c.after.quantity})`;
   }
-  return notifyWorthy.map((c) => c.after.title).join(", ");
+  // .before covers "removed" (no .after exists); every other kind has .after.
+  return notifyWorthy.map((c) => (c.after ?? c.before).title).join(", ");
 }
 __name(compactChangesBody, "compactChangesBody");
 __name2(compactChangesBody, "compactChangesBody");
@@ -525,9 +540,20 @@ async function storeChanges(env, changes, rewards) {
   const historyRaw = await env.REWARDS_KV.get(CHANGES_KEY);
   let history = historyRaw ? JSON.parse(historyRaw) : [];
   for (const change of changes) {
-    const reward = rewards.find((r) => r.id === change.id);
-    if (!reward) continue;
-    const imageUrl = reward.images?.[0]?.url || null;
+    // Real bug fixed 2026-08-27: a "removed" change's item is, by
+    // definition, no longer in the current `rewards` fetch -- that's what
+    // makes it "removed". The old `if (!reward) continue` here silently
+    // dropped every single removal before it was ever stored, so it never
+    // showed on /status and there was never any record of when an item
+    // disappeared, even though diff() correctly detected it. Only look the
+    // reward up in the current fetch for kinds that should actually be in
+    // it; a removal has no current fetch data to look up at all, and no
+    // stored imageUrl either (the snapshot never captured one), so it
+    // falls back to no image -- handleStatus already renders that
+    // gracefully ("No image").
+    const reward = change.kind === "removed" ? null : rewards.find((r) => r.id === change.id);
+    if (!reward && change.kind !== "removed") continue;
+    const imageUrl = reward?.images?.[0]?.url || null;
     history.unshift({
       id: change.id,
       title: change.after?.title || change.before?.title,
@@ -546,6 +572,36 @@ async function storeChanges(env, changes, rewards) {
 }
 __name(storeChanges, "storeChanges");
 __name2(storeChanges, "storeChanges");
+// "Expiring soon" alerts (getExpiringItems) were always a completely
+// separate path from diff()/storeChanges -- never written into
+// CHANGES_KEY, so they never showed up on /status at all, matching the
+// .badge-expire CSS rule that's existed but had nothing that ever set it.
+// Added 2026-08-27 alongside the "removed" fix above, same shared history
+// list so /status can show every kind of thing this Worker actually
+// tracks, not just two of the four.
+async function storeExpiringHistory(env, expiringItems, rewards) {
+  if (!expiringItems.length) return;
+  const historyRaw = await env.REWARDS_KV.get(CHANGES_KEY);
+  let history = historyRaw ? JSON.parse(historyRaw) : [];
+  for (const item of expiringItems) {
+    const reward = rewards.find((r) => r.id === item.id);
+    const imageUrl = reward?.images?.[0]?.url || null;
+    history.unshift({
+      id: item.id,
+      title: item.title,
+      slug: item.slug,
+      imageUrl,
+      kind: "expiring",
+      timestamp: Date.now(),
+      quantity: item.quantity,
+      pointValue: item.pointValue,
+      endDate: item.endDate
+    });
+  }
+  history = history.slice(0, MAX_STORED_CHANGES);
+  await env.REWARDS_KV.put(CHANGES_KEY, JSON.stringify(history));
+}
+__name(storeExpiringHistory, "storeExpiringHistory");
 async function handleTrigger(request, env) {
   let body;
   try {
@@ -564,7 +620,12 @@ __name2(handleTrigger, "handleTrigger");
 async function handleStatus(env) {
   const historyRaw = await env.REWARDS_KV.get(CHANGES_KEY);
   const history = historyRaw ? JSON.parse(historyRaw) : [];
-  const recent = history.slice(0, 3);
+  // Was slice(0, 3) -- showed only the 3 most recent changes even though
+  // up to MAX_STORED_CHANGES (50) are actually kept in KV. Now shows
+  // everything that's stored, so removals (and everything else) are
+  // actually visible here instead of scrolling off after the next couple
+  // of changes.
+  const recent = history;
   const triggerKey = env.MANUAL_TRIGGER_KEY || "";
   const html = `<!DOCTYPE html>
 <html>
@@ -629,6 +690,8 @@ async function handleStatus(env) {
     .badge-new { background: #d4edda; color: #155724; }
     .badge-restock { background: #cfe2ff; color: #084298; }
     .badge-expire { background: #fff3cd; color: #664d03; }
+    .badge-removed { background: #f8d7da; color: #721c24; }
+    .card.is-removed .card-image { opacity: .5; }
     .card-title {
       font-size: 16px;
       font-weight: 600;
@@ -691,7 +754,7 @@ async function handleStatus(env) {
 <body>
   <div class="container">
     <div class="header-bar">
-      <h1 style="margin-bottom: 0;">\u{1F3C6} LEGO Insiders Rewards — Latest Changes</h1>
+      <h1 style="margin-bottom: 0;">\u{1F3C6} LEGO Insiders Rewards — Latest Changes (${recent.length})</h1>
       <div>
         <button class="refresh-btn" id="refreshBtn" onclick="triggerRefresh()">\u{1F504} Refresh</button>
         <div class="status-message" id="statusMsg" style="display: none;"></div>
@@ -700,15 +763,37 @@ async function handleStatus(env) {
     <div class="changes">
       ${recent.length ? recent.map((item) => {
     const date = new Date(item.timestamp).toLocaleString();
+    // Four real kinds now, not two -- "removed"/"expiring" used to either
+    // get silently dropped before ever reaching this page (removed) or
+    // never stored here at all (expiring, a fully separate alert path).
+    // badge-expire's CSS rule existed before this and had nothing that
+    // ever set it -- this was clearly meant to happen and never got wired
+    // up the rest of the way.
     let badgeClass = "badge-new";
     let badgeText = "\u{1F195} New";
     if (item.kind === "changed") {
       badgeClass = "badge-restock";
       badgeText = "\u{1F4E6} Restock";
+    } else if (item.kind === "removed") {
+      badgeClass = "badge-removed";
+      badgeText = "\u{1F5D1}️ Removed";
+    } else if (item.kind === "expiring") {
+      badgeClass = "badge-expire";
+      badgeText = "⏳ Expiring Soon";
     }
+    const isRemoved = item.kind === "removed";
     const url = `https://www.lego.com/en-us/insiders/rewards/${item.slug}`;
+    let metaLine;
+    if (item.kind === "changed") {
+      metaLine = `<span>qty: ${item.beforeQty} → <strong>${item.afterQty}</strong></span>`;
+    } else if (item.kind === "expiring") {
+      const daysLeft = Math.ceil((new Date(item.endDate).getTime() - Date.now()) / (24 * 60 * 60 * 1e3));
+      metaLine = `<span>expires in <strong>${daysLeft}</strong> day${daysLeft !== 1 ? "s" : ""}</span>`;
+    } else {
+      metaLine = `<span>qty: <strong>${item.quantity}</strong></span>`;
+    }
     return `
-      <div class="card">
+      <div class="card${isRemoved ? " is-removed" : ""}">
         <div class="card-image">
           ${item.imageUrl ? `<img src="${item.imageUrl}" alt="${item.title}">` : '<span style="color:#ccc;">No image</span>'}
         </div>
@@ -717,10 +802,10 @@ async function handleStatus(env) {
           <div class="card-title">${item.title}</div>
           <div class="card-meta">
             <span><strong>${item.pointValue}</strong> points</span>
-            ${item.kind === "changed" ? `<span>qty: ${item.beforeQty} → <strong>${item.afterQty}</strong></span>` : `<span>qty: <strong>${item.quantity}</strong></span>`}
+            ${metaLine}
             <span style="font-size: 12px; color: #999; margin-top: 8px;">${date}</span>
           </div>
-          <a href="${url}" target="_blank" class="card-link">View on LEGO.com →</a>
+          ${isRemoved ? '<span style="font-size: 12px; color: #999;">No longer listed — link likely 404s</span>' : `<a href="${url}" target="_blank" class="card-link">View on LEGO.com →</a>`}
         </div>
       </div>
         `;
