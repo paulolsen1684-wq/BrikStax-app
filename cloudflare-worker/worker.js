@@ -2658,23 +2658,19 @@ async function handleDealsClear(request, env) {
 __name(handleDealsClear, "handleDealsClear");
 async function discoverNewSets(env) {
   const progress = await env.PRICE_CACHE.prepare(
-    "SELECT rb_page, rb_done FROM seed_progress WHERE id = 1"
+    "SELECT rb_page, rb_done, rb_backfill_complete FROM seed_progress WHERE id = 1"
   ).first();
-  // Real bug fixed 2026-08-26: `page` used to fall through to the
-  // pre-reset `progress.rb_page` even on the exhaustion-reset branch just
-  // above it -- the DB got rb_page=1 written, but this same call still
-  // fetched the OLD (already-exhausted, already-404ing) page number one
-  // more time before the restart actually took effect on the *next* call.
-  // Confirmed live: an exhausted run (rb_page 334) reset to 1 in the DB
-  // but still re-fetched page 334 (immediately 404ing again) instead of
-  // actually starting the fresh page-1 walk that same invocation.
-  let page = progress?.rb_page || 1;
-  if (progress?.rb_done === 1) {
-    page = 1;
-    await env.PRICE_CACHE.prepare(
-      "UPDATE seed_progress SET rb_page = 1, rb_done = 0 WHERE id = 1"
-    ).run();
+  // Real design fix 2026-08-27: this used to unconditionally reset to
+  // page 1 and re-walk the ENTIRE catalog again every time it reached the
+  // end, forever -- see ensureBackfillCompleteColumn's own comment for
+  // why that's redundant once the one-time backfill genuinely finishes.
+  // rb_backfill_complete is permanent (never cleared, unlike rb_done) --
+  // once it's set, this returns immediately with no fetch at all, and
+  // ongoing new-release discovery is left entirely to runMonthlyCatchup.
+  if (progress?.rb_backfill_complete === 1) {
+    return { discovered: 0, done: true, backfillComplete: true };
   }
+  const page = progress?.rb_page || 1;
   try {
     const rbUrl = `https://rebrickable.com/api/v3/lego/sets/?ordering=-year&page_size=${RB_DISCOVERY_PAGE_SIZE}&page=${page}&min_parts=10`;
     const resp = await rbFetch(rbUrl, env);
@@ -2688,16 +2684,16 @@ async function discoverNewSets(env) {
       // (429/500/etc.) still surfaces as a real error so the caller stops
       // this invocation's page-walk rather than hammering a live failure.
       if (resp.status === 404) {
-        await env.PRICE_CACHE.prepare("UPDATE seed_progress SET rb_done = 1 WHERE id = 1").run();
-        return { discovered: 0, done: true };
+        await env.PRICE_CACHE.prepare("UPDATE seed_progress SET rb_done = 1, rb_backfill_complete = 1 WHERE id = 1").run();
+        return { discovered: 0, done: true, backfillComplete: true };
       }
       return { discovered: 0, error: `HTTP ${resp.status}` };
     }
     const data = await resp.json();
     const results = data.results || [];
     if (results.length === 0) {
-      await env.PRICE_CACHE.prepare("UPDATE seed_progress SET rb_done = 1 WHERE id = 1").run();
-      return { discovered: 0, done: true };
+      await env.PRICE_CACHE.prepare("UPDATE seed_progress SET rb_done = 1, rb_backfill_complete = 1 WHERE id = 1").run();
+      return { discovered: 0, done: true, backfillComplete: true };
     }
     let added = 0;
     for (const set of results) {
@@ -2759,6 +2755,27 @@ async function ensureMonthlyCatchupColumn(env) {
   }
 }
 __name(ensureMonthlyCatchupColumn, "ensureMonthlyCatchupColumn");
+// Added 2026-08-27, real design fix: discoverNewSets used to reset itself
+// back to page 1 and walk the *entire* Rebrickable catalog again every
+// single time it reached the end -- forever, on a loop. That made sense
+// as a one-time full-catalog backfill, but once that backfill genuinely
+// finishes, re-walking everything again is almost entirely redundant
+// re-checking of sets already resolved one way or another (already
+// cached, or confirmed to have no barcode) -- ongoing new-release
+// discovery is already handled separately and far more cheaply by
+// runMonthlyCatchup (checks just the first few pages, early each month).
+// rb_done was always meant to be transient (cleared the moment the reset
+// happens); this is the permanent version that, once set, never clears --
+// see discoverNewSets' own use of it below.
+async function ensureBackfillCompleteColumn(env) {
+  try {
+    await env.PRICE_CACHE.prepare(
+      "ALTER TABLE seed_progress ADD COLUMN rb_backfill_complete INTEGER"
+    ).run();
+  } catch (_) {
+  }
+}
+__name(ensureBackfillCompleteColumn, "ensureBackfillCompleteColumn");
 async function runMonthlyCatchup(env, limit) {
   const candidates = [];
   for (let page = 1; page <= MONTHLY_CATCHUP_PAGES && candidates.length < limit; page++) {
@@ -2934,6 +2951,7 @@ __name(handleAdminActivity, "handleAdminActivity");
 async function runSeedBatch(env) {
   if (!env.PRICE_CACHE) return { ok: false, reason: "no_db" };
   await ensureMonthlyCatchupColumn(env);
+  await ensureBackfillCompleteColumn(env);
   const bsKey = env.BRICKSET_KEY || BRICKSET_KEY_FALLBACK;
   const now = /* @__PURE__ */ new Date();
   const monthKey = now.toISOString().slice(0, 7);
@@ -3066,7 +3084,7 @@ async function handleSeedStatus(env) {
     const barcodeCount = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM barcode_cache").first();
     const queueCount = await env.PRICE_CACHE.prepare("SELECT COUNT(*) as cnt FROM seed_queue").first();
     const nextSet = await env.PRICE_CACHE.prepare("SELECT set_num FROM seed_queue ORDER BY queued_at ASC LIMIT 1").first();
-    return json({ mode: "dynamic", barcodes_cached: barcodeCount?.cnt ?? 0, queue_size: queueCount?.cnt ?? 0, rebrickable_page: progress?.rb_page ?? 1, rebrickable_exhausted: progress?.rb_done === 1, last_run: progress?.last_run ?? "never", next_set: nextSet?.set_num ?? null, monthly_catchup_month: progress?.monthly_catchup_month ?? null });
+    return json({ mode: "dynamic", barcodes_cached: barcodeCount?.cnt ?? 0, queue_size: queueCount?.cnt ?? 0, rebrickable_page: progress?.rb_page ?? 1, rebrickable_exhausted: progress?.rb_done === 1, backfill_complete: progress?.rb_backfill_complete === 1, last_run: progress?.last_run ?? "never", next_set: nextSet?.set_num ?? null, monthly_catchup_month: progress?.monthly_catchup_month ?? null });
   } catch (e) {
     return err(`DB error: ${e.message}`);
   }
