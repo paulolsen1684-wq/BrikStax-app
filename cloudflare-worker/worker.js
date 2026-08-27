@@ -1668,7 +1668,7 @@ var RB_DISCOVERY_PAGE_SIZE = 50;
 // under Workers' per-invocation subrequest ceiling even before whatever
 // runSeedBatch's own BrickSet loop needs afterward.
 var MAX_DISCOVERY_ATTEMPTS_PER_RUN = 40;
-var MIN_YEAR = 2015;
+var MIN_YEAR = 0;
 var BRICKSET_DELAY_MS = 2e3;
 var MONTHLY_CATCHUP_PAGES = 4;
 var MONTHLY_CATCHUP_DAY_CUTOFF = 3;
