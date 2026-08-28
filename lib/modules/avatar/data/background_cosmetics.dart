@@ -72,6 +72,12 @@ class BackgroundCosmetic {
   // secret_item_service.dart.
   final bool isSecret;
 
+  // Only obtainable by completing a What's New quest -- excluded from
+  // LootService's normal reward pool AND the isSecret drop pool. Default
+  // false; set true on limited-time quest-only backgrounds so they can
+  // never drop or be bought in the Brik Shop.
+  final bool isQuestExclusive;
+
   // Flavor text (e.g. "Something stirs at midnight.") shown in the loot
   // roll popup.
   final String? description;
@@ -83,6 +89,7 @@ class BackgroundCosmetic {
     required this.assetPath,
     required this.rarity,
     this.isSecret = false,
+    this.isQuestExclusive = false,
     this.description,
   });
 }

@@ -70,12 +70,14 @@ List<_RewardEntry> get _rewardPool => [
       .where((c) =>
           !_starterIds.contains(c.id) &&
           !c.isSecret &&
+          !c.isQuestExclusive &&
           !_themeAndBundleIds.contains(c.id))
       .map((c) => _RewardEntry(c.id, c.rarity)),
   ...pixel.allPixelCosmetics
       .where((c) =>
           !AvatarState.starterIds.contains(c.id) &&
           !c.isSecret &&
+          !c.isQuestExclusive &&
           !_themeAndBundleIds.contains(c.id))
       .map((c) => _RewardEntry(c.id, c.rarity.asCosmeticRarity)),
 ];

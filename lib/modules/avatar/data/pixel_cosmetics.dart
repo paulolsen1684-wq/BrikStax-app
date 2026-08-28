@@ -62,6 +62,13 @@ class PixelCosmetic {
   // rewards.
   final bool isSecret;
 
+  // Only obtainable by completing a What's New quest -- excluded from
+  // LootService's normal reward pool AND the isSecret drop pool (unlike
+  // isSecret alone, which still leaves an item reachable via the rare
+  // secret-drop roll). Default false; set true on limited-time quest-only
+  // items so they can never drop or be bought in the Brik Shop.
+  final bool isQuestExclusive;
+
   // Per-item nudge on top of the shared slot geometry in pixel_avatar_widget
   // .dart -- the compositor positions every item in a slot with ONE shared
   // formula (e.g. all hats use the same box/anchor), which works until an
@@ -85,6 +92,7 @@ class PixelCosmetic {
     this.description,
     this.frames,
     this.isSecret = false,
+    this.isQuestExclusive = false,
     this.offsetX = 0,
     this.offsetY = 0,
     this.scale = 1,
