@@ -5,7 +5,7 @@ Step-by-step for building, archiving, and submitting a BrikStax release on the M
 ## This release
 
 - **Version:** 2.4.0+10 (`pubspec.yaml`)
-- **Branch to pull:** `add-quest-builder-tool` — **not** `main`. Everything for this release lives here; it hasn't been merged yet.
+- **Branch to pull:** `main`. (Standing rule: always merge into `main` before a release build — never ship from a feature branch.)
 - **What's New copy:** see the bottom of this doc — already written, just paste it in.
 
 ---
@@ -21,7 +21,7 @@ Step-by-step for building, archiving, and submitting a BrikStax release on the M
 ```bash
 cd /path/to/brikstax_fresh   # wherever this repo lives on the Mac
 git fetch origin
-git checkout add-quest-builder-tool
+git checkout main
 git pull
 ```
 
