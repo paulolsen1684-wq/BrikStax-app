@@ -135,14 +135,24 @@
 // the part of the hat that actually sits near the hairline, so a flush
 // anchor read as a gap above the head.
 //
-// Z-order (back to front): legs, head, torso, hat. Legs-under-everything and
-// hat-over-everything are unchanged from the old sprite system's rule (legs
-// draw first so torso covers the waistband, hat draws last so it covers
-// hair). head/torso ordering flipped in pass 11 -- torso now paints OVER
-// head in their pass-10 overlap zone, the opposite of the old "head draws
-// over the torso collar so a hood/collar sits behind the face" rule (that
-// rule is retired; torso art in this catalog doesn't have a collar/hood
-// case that depended on it).
+// Z-order (back to front): legs, head, torso, hat, item. Legs-under-
+// everything and hat-over-everything are unchanged from the old sprite
+// system's rule (legs draw first so torso covers the waistband, hat draws
+// last so it covers hair). head/torso ordering flipped in pass 11 -- torso
+// now paints OVER head in their pass-10 overlap zone, the opposite of the
+// old "head draws over the torso collar so a hood/collar sits behind the
+// face" rule (that rule is retired; torso art in this catalog doesn't have a
+// collar/hood case that depended on it).
+//
+// This is now a PER-ITEM default, not a hardcoded Stack order: each slot's
+// number above lives on PixelSlot.defaultZ (pixel_cosmetics.dart), and an
+// individual PixelCosmetic can override it via its own zOrder field for the
+// rare outlier that needs to break its slot's usual position (added
+// alongside a z-order control in PixelItemTunerScreen, same tune-live/
+// hand-copy-into-the-catalog workflow as offsetX/offsetY/scale). build()
+// below sorts the active layers by PixelCosmetic.effectiveZ each frame
+// rather than assuming a fixed order, so a per-item override actually takes
+// effect without needing to reorder anything in this file.
 //
 // Item (trophy/brick stack/watering can/toolbox) has no "held in hand" pose
 // designed for this catalog, so it renders the same way ground accessories
@@ -357,64 +367,78 @@ class _PixelAvatarWidgetState extends State<PixelAvatarWidget>
     final totalW = PixelAvatarWidget._canvasW +
         (item != null ? PixelAvatarWidget._itemGap + PixelAvatarWidget._itemW : 0);
 
+    // Each slot's own geometry formula is unchanged from before per-item
+    // z-order existed -- only the PAINT ORDER is now data-driven. Built as
+    // (effectiveZ, insertion index, widget) triples and sorted ascending
+    // (lower z paints first, further back) rather than relying on Dart's
+    // if-block order, so a cosmetic's own zOrder override actually changes
+    // what's drawn on top of what. The insertion index is an explicit
+    // tie-breaker (Dart's List.sort isn't documented as stable) so the
+    // overwhelmingly common case -- every equipped item left at its slot's
+    // own distinct defaultZ, no ties at all -- is unaffected either way, and
+    // the rare case where a manual override collides with another slot's z
+    // still resolves deterministically (this legs/head/torso/hat/item
+    // order) instead of an unspecified one.
+    final layers = <(int, int, Widget)>[
+      if (legs != null)
+        (legs.effectiveZ, 0, _layer(legs, unit,
+            baseLeft: 13 * unit, baseTop: topPad + 56 * unit,
+            baseWUnits: 38, baseHUnits: 50, fit: BoxFit.fill)),
+      if (head != null)
+        (head.effectiveZ, 1, _layer(head, unit,
+            baseLeft: 21.5 * unit, baseTop: headHatTop,
+            baseWUnits: 21, baseHUnits: 25.2, fit: BoxFit.fill)),
+      if (torso != null)
+        // Top is anchored flush beneath the (now-lower, now-bigger)
+        // head -- topHalfTop + head's own height, not a fixed offset --
+        // so torso genuinely overlaps down into leg territory when the
+        // top half drops or the head grows. See pass 8. Its slot's own
+        // defaultZ (2, after head's 1) is what makes torso draw OVER head
+        // in their pass-10 overlap zone by default -- the opposite of the
+        // old "head draws over the torso collar" rule; that rule is
+        // retired for this pair, see the z-order note above.
+        (torso.effectiveZ, 2, _layer(torso, unit,
+            baseLeft: 8 * unit, baseTop: topHalfTop + 24 * unit,
+            baseWUnits: 48, baseHUnits: 38, fit: BoxFit.fill)),
+      if (hat != null)
+        // Bottom edge deliberately overlaps _hatDip units into the head
+        // zone rather than sitting exactly flush at headHatTop -- hats
+        // drawn at an angle (a brim projecting down and to the side,
+        // matching the reference style) have their bounding-box bottom
+        // at the brim TIP, not at the part of the hat that actually
+        // sits near the hairline. Anchoring flush to that bounding box
+        // pushed the whole hat up, reading as a gap above the head.
+        // This was in the original spec (a "brim overlap allowance")
+        // but got dropped when this widget was first built --
+        // restoring it here instead of re-deriving it. Anchored off
+        // headHatTop (not topHalfTop) so the hat rides down with the
+        // head, independent of torso -- see pass 10. Plus
+        // _hatExtraDrop on top of that, hat-only -- see pass 12.
+        (hat.effectiveZ, 3, _layer(hat, unit,
+            baseLeft: 11.575 * unit,
+            baseTop: headHatTop - PixelAvatarWidget._hatBandH * unit +
+                PixelAvatarWidget._hatExtraDrop * unit,
+            baseWUnits: 40.85,
+            baseHUnits: PixelAvatarWidget._hatBandH + PixelAvatarWidget._hatDip,
+            fit: BoxFit.contain, alignment: Alignment.bottomCenter)),
+      if (item != null)
+        // Bottom-aligned with the legs' own bottom edge (topPad +
+        // canvasH*unit, i.e. the same ground line the feet stand on)
+        // rather than the item box's own top -- items are various
+        // aspect ratios and shouldn't all read as floating at
+        // different heights.
+        (item.effectiveZ, 4, _layer(item, unit,
+            baseLeft: (PixelAvatarWidget._canvasW + PixelAvatarWidget._itemGap) * unit,
+            baseTop: topPad + (PixelAvatarWidget._canvasH - PixelAvatarWidget._itemH) * unit,
+            baseWUnits: PixelAvatarWidget._itemW, baseHUnits: PixelAvatarWidget._itemH,
+            fit: BoxFit.contain, alignment: Alignment.bottomCenter)),
+    ]..sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
+
     return ClipRect(
       child: SizedBox(
         width: totalW * unit,
         height: topPad + size,
-        child: Stack(children: [
-          if (legs != null)
-            _layer(legs, unit,
-                baseLeft: 13 * unit, baseTop: topPad + 56 * unit,
-                baseWUnits: 38, baseHUnits: 50, fit: BoxFit.fill),
-          if (head != null)
-            _layer(head, unit,
-                baseLeft: 21.5 * unit, baseTop: headHatTop,
-                baseWUnits: 21, baseHUnits: 25.2, fit: BoxFit.fill),
-          if (torso != null)
-            // Top is anchored flush beneath the (now-lower, now-bigger)
-            // head -- topHalfTop + head's own height, not a fixed offset --
-            // so torso genuinely overlaps down into leg territory when the
-            // top half drops or the head grows. See pass 8. Painted AFTER
-            // head (pass 11) so torso draws OVER head in their pass-10
-            // overlap zone -- the opposite of the "head draws over the
-            // torso collar" rule this file used to follow; that rule is
-            // retired for this pair, see the z-order note below.
-            _layer(torso, unit,
-                baseLeft: 8 * unit, baseTop: topHalfTop + 24 * unit,
-                baseWUnits: 48, baseHUnits: 38, fit: BoxFit.fill),
-          if (hat != null)
-            // Bottom edge deliberately overlaps _hatDip units into the head
-            // zone rather than sitting exactly flush at headHatTop -- hats
-            // drawn at an angle (a brim projecting down and to the side,
-            // matching the reference style) have their bounding-box bottom
-            // at the brim TIP, not at the part of the hat that actually
-            // sits near the hairline. Anchoring flush to that bounding box
-            // pushed the whole hat up, reading as a gap above the head.
-            // This was in the original spec (a "brim overlap allowance")
-            // but got dropped when this widget was first built --
-            // restoring it here instead of re-deriving it. Anchored off
-            // headHatTop (not topHalfTop) so the hat rides down with the
-            // head, independent of torso -- see pass 10. Plus
-            // _hatExtraDrop on top of that, hat-only -- see pass 12.
-            _layer(hat, unit,
-                baseLeft: 11.575 * unit,
-                baseTop: headHatTop - PixelAvatarWidget._hatBandH * unit +
-                    PixelAvatarWidget._hatExtraDrop * unit,
-                baseWUnits: 40.85,
-                baseHUnits: PixelAvatarWidget._hatBandH + PixelAvatarWidget._hatDip,
-                fit: BoxFit.contain, alignment: Alignment.bottomCenter),
-          if (item != null)
-            // Bottom-aligned with the legs' own bottom edge (topPad +
-            // canvasH*unit, i.e. the same ground line the feet stand on)
-            // rather than the item box's own top -- items are various
-            // aspect ratios and shouldn't all read as floating at
-            // different heights.
-            _layer(item, unit,
-                baseLeft: (PixelAvatarWidget._canvasW + PixelAvatarWidget._itemGap) * unit,
-                baseTop: topPad + (PixelAvatarWidget._canvasH - PixelAvatarWidget._itemH) * unit,
-                baseWUnits: PixelAvatarWidget._itemW, baseHUnits: PixelAvatarWidget._itemH,
-                fit: BoxFit.contain, alignment: Alignment.bottomCenter),
-        ]),
+        child: Stack(children: [for (final l in layers) l.$3]),
       ),
     );
   }

@@ -11,6 +11,12 @@
 // .overrides) and previews the change live via PixelAvatarWidget's
 // overrides param, without touching the real const catalog.
 //
+// Layer/z-order control (_zOrderRow) added alongside offset/scale: most
+// items are fine at their slot's usual paint position (PixelSlot.defaultZ),
+// but an outlier occasionally needs to jump ahead of/behind that -- same
+// per-item-override, tune-live-then-hand-copy-in workflow as offsetX/
+// offsetY/scale, just on PixelCosmetic.zOrder instead.
+//
 // This tool does NOT bake anything into pixel_cosmetics.dart by itself --
 // edits only live in SharedPreferences on this device until you use "Copy
 // Overrides" to get a paste-ready Dart snippet and hand it back so the
@@ -43,14 +49,22 @@ class PixelItemTunerScreen extends StatefulWidget {
 
 class _Ov {
   double offsetX, offsetY, scale;
-  _Ov({this.offsetX = 0, this.offsetY = 0, this.scale = 1});
-  Map<String, dynamic> toJson() => {'offsetX': offsetX, 'offsetY': offsetY, 'scale': scale};
+  // Null means "no override, use this item's slot's usual paint order" --
+  // same null-means-untouched convention as PixelCosmetic.zOrder itself
+  // (see that field's doc comment in pixel_cosmetics.dart), not 0/0/1's
+  // "this literal value is the default" convention offsetX/offsetY/scale
+  // use, since 0 is itself a perfectly valid explicit z-order to set.
+  int? zOrder;
+  _Ov({this.offsetX = 0, this.offsetY = 0, this.scale = 1, this.zOrder});
+  Map<String, dynamic> toJson() =>
+      {'offsetX': offsetX, 'offsetY': offsetY, 'scale': scale, if (zOrder != null) 'zOrder': zOrder};
   factory _Ov.fromJson(Map<String, dynamic> j) => _Ov(
     offsetX: (j['offsetX'] as num?)?.toDouble() ?? 0,
     offsetY: (j['offsetY'] as num?)?.toDouble() ?? 0,
     scale:   (j['scale']   as num?)?.toDouble() ?? 1,
+    zOrder:  (j['zOrder']  as num?)?.toInt(),
   );
-  bool get isDefault => offsetX == 0 && offsetY == 0 && scale == 1;
+  bool get isDefault => offsetX == 0 && offsetY == 0 && scale == 1 && zOrder == null;
 }
 
 class _State extends State<PixelItemTunerScreen> {
@@ -130,7 +144,15 @@ class _State extends State<PixelItemTunerScreen> {
   }
 
   void _nudgeScale(_Ov ov, double d) {
-    setState(() { ov.scale = (ov.scale + d).clamp(0.2, 4.0); });
+    setState(() { ov.scale = (ov.scale + d).clamp(0.2, 10.0); });
+    _persist();
+  }
+
+  // zOrder starts from the item's own slot default (not 0) the first time
+  // it's nudged, so tapping +/- always moves it one step relative to where
+  // it already paints instead of jumping to some unrelated absolute number.
+  void _nudgeZOrder(_Ov ov, PixelCosmetic selected, int d) {
+    setState(() => ov.zOrder = (ov.zOrder ?? selected.slot.defaultZ) + d);
     _persist();
   }
 
@@ -149,6 +171,7 @@ class _State extends State<PixelItemTunerScreen> {
       if (selected != null && ov != null)
         selected.id: selected.copyWith(
           offsetX: ov.offsetX, offsetY: ov.offsetY, scale: ov.scale,
+          zOrder: ov.zOrder, clearZOrder: ov.zOrder == null,
           frames: (_paused && selected.isAnimated)
               ? [selected.renderFrames[_manualFrame.clamp(0, selected.renderFrames.length - 1)]]
               : null,
@@ -226,7 +249,7 @@ class _State extends State<PixelItemTunerScreen> {
                       setState(() {
                         ov.offsetX = _gestureBase!.offsetX + totalDelta.dx / unit;
                         ov.offsetY = _gestureBase!.offsetY + totalDelta.dy / unit;
-                        ov.scale   = (_gestureBase!.scale * details.scale).clamp(0.2, 4.0);
+                        ov.scale   = (_gestureBase!.scale * details.scale).clamp(0.2, 10.0);
                       });
                     },
                     onScaleEnd: (_) {
@@ -388,7 +411,8 @@ class _State extends State<PixelItemTunerScreen> {
           const SizedBox(height: 4),
           _numField(bt, 'offsetX', ov.offsetX, (v) => setState(() => ov.offsetX = v)),
           _numField(bt, 'offsetY', ov.offsetY, (v) => setState(() => ov.offsetY = v)),
-          _numField(bt, 'scale',   ov.scale,   (v) => setState(() => ov.scale   = v.clamp(0.2, 4.0))),
+          _numField(bt, 'scale',   ov.scale,   (v) => setState(() => ov.scale   = v.clamp(0.2, 10.0))),
+          _zOrderRow(bt, selected, ov),
           Row(children: [
             TextButton(
               style: TextButton.styleFrom(
@@ -396,7 +420,7 @@ class _State extends State<PixelItemTunerScreen> {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              onPressed: () { setState(() { ov.offsetX = 0; ov.offsetY = 0; ov.scale = 1; }); _persist(); },
+              onPressed: () { setState(() { ov.offsetX = 0; ov.offsetY = 0; ov.scale = 1; ov.zOrder = null; }); _persist(); },
               child: Text('Reset', style: BT.body(size: 12, color: bt.tx2, weight: FontWeight.w600)),
             ),
             const SizedBox(width: 6),
@@ -456,6 +480,58 @@ class _State extends State<PixelItemTunerScreen> {
     return tooltip == null ? btn : Tooltip(message: tooltip, child: btn);
   }
 
+  // Layer/z-order control: shows the item's EFFECTIVE paint position (its
+  // own override if set, otherwise its slot's defaultZ -- see
+  // PixelCosmetic.effectiveZ) plus a plain-English "behind/in front of"
+  // readout against the other 4 slots, since a bare integer alone doesn't
+  // tell you what it actually changes relative to. +/- nudge by 1; "Default"
+  // only shows once an override is actually set (clears it back to null
+  // rather than to some fixed number, restoring the item to its slot's own
+  // usual position instead of pinning it to whatever that slot's default
+  // happened to be at tune-time).
+  Widget _zOrderRow(BrikStaxColors bt, PixelCosmetic selected, _Ov ov) {
+    final effective = ov.zOrder ?? selected.slot.defaultZ;
+    final others = PixelSlot.values
+        .where((s) => s != selected.slot)
+        .toList()
+      ..sort((a, b) => a.defaultZ.compareTo(b.defaultZ));
+    final behind = others.where((s) => s.defaultZ > effective).map((s) => s.name);
+    final infront = others.where((s) => s.defaultZ < effective).map((s) => s.name);
+    final desc = [
+      if (infront.isNotEmpty) 'in front of ${infront.join(", ")}',
+      if (behind.isNotEmpty) 'behind ${behind.join(", ")}',
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(children: [
+        SizedBox(width: 54, child: Text('layer', style: BT.mono(size: 11, color: bt.tx2))),
+        _nudgeBtn(bt, Icons.remove, () => _nudgeZOrder(ov, selected, -1), tooltip: 'Send back'),
+        SizedBox(
+          width: 28,
+          child: Text('$effective', textAlign: TextAlign.center,
+              style: BT.mono(size: 12, color: bt.tx)),
+        ),
+        _nudgeBtn(bt, Icons.add, () => _nudgeZOrder(ov, selected, 1), tooltip: 'Bring forward'),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(desc.isEmpty ? 'alone at this layer' : desc,
+              style: BT.mono(size: 9, color: bt.tx3),
+              overflow: TextOverflow.ellipsis),
+        ),
+        if (ov.zOrder != null)
+          TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: () { setState(() => ov.zOrder = null); _persist(); },
+            child: Text('Default', style: BT.body(size: 11, color: bt.tx2, weight: FontWeight.w600)),
+          ),
+      ]),
+    );
+  }
+
   Widget _numField(BrikStaxColors bt, String label, double value, void Function(double) onChanged) {
     final controller = TextEditingController(text: value.toStringAsFixed(3));
     return Padding(
@@ -492,7 +568,8 @@ class _State extends State<PixelItemTunerScreen> {
     for (final e in entries) {
       final o = e.value;
       buf.writeln("'${e.key}': offsetX: ${o.offsetX.toStringAsFixed(2)}, "
-          "offsetY: ${o.offsetY.toStringAsFixed(2)}, scale: ${o.scale.toStringAsFixed(3)},");
+          "offsetY: ${o.offsetY.toStringAsFixed(2)}, scale: ${o.scale.toStringAsFixed(3)}"
+          "${o.zOrder != null ? ', zOrder: ${o.zOrder}' : ''},");
     }
     Clipboard.setData(ClipboardData(text: buf.toString()));
     ScaffoldMessenger.of(context).showSnackBar(
