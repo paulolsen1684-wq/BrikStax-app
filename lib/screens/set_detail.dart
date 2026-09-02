@@ -4,10 +4,13 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 import '../models/lego_set.dart';
 import '../models/brickset_extras.dart';
+import '../models/minifig.dart';
 import '../providers/collection.dart';
 import '../services/api.dart';
+import '../services/minifig_service.dart';
 import '../services/rebrickable_link.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_themes.dart';
@@ -838,6 +841,23 @@ class _DetailsTabState extends State<_DetailsTab> {
   // _loadExtras.
   String? _selectedLanguage;
 
+  // Minifigs that come in this set, via Rebrickable's free per-set endpoint
+  // (fetchSetMinifigs) -- same lazy-fetch-once-per-screen pattern
+  // SetDetailScreen's own _loadExtras uses, just scoped to this widget
+  // instead of threaded up through the parent, since nothing else on this
+  // screen needs it.
+  List<Map<String, dynamic>>? _setMinifigs;
+  bool _minifigsRequested = false;
+  static const _uuid = Uuid();
+
+  void _loadMinifigs(String num) {
+    if (_minifigsRequested) return;
+    _minifigsRequested = true;
+    Api.instance.fetchSetMinifigs(num).then((list) {
+      if (mounted) setState(() => _setMinifigs = list);
+    });
+  }
+
   @override void initState() {
     super.initState();
     _notes = TextEditingController(text: widget.s.notes);
@@ -997,6 +1017,7 @@ class _DetailsTabState extends State<_DetailsTab> {
     final bt     = context.bt;
     final s      = widget.s;
     final extras = widget.extras;
+    _loadMinifigs(s.num);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 100),
@@ -1138,6 +1159,14 @@ class _DetailsTabState extends State<_DetailsTab> {
           const SizedBox(height: 12),
         ],
 
+        // ── Minifigs in this set (Rebrickable) ───────────────────────────
+        if (_setMinifigs != null && _setMinifigs!.isNotEmpty) ...[
+          Text('Minifigs in this set', style: BT.mono(size: 9, color: bt.tx3)),
+          const SizedBox(height: 6),
+          _minifigsCard(bt, _setMinifigs!, s.num),
+          const SizedBox(height: 12),
+        ],
+
 
 
         // Notes
@@ -1189,6 +1218,74 @@ class _DetailsTabState extends State<_DetailsTab> {
     ),
     child: Column(children: rows),
   );
+
+  // Each row's quick-add icon calls MinifigService directly, no navigation
+  // required for the common case -- the whole point of surfacing this here
+  // rather than only reachable via the standalone MinifigLookupScreen (which
+  // needs the exact Rebrickable fig-num typed in, not practical to expect a
+  // user to know offhand). Rebrickable's per-set response nests the actual
+  // minifig object under a "set" key (mirrors fetchSet's own set_num/
+  // set_img_url/name field names, since it's the same minifig-as-a-"set"
+  // representation Rebrickable uses everywhere in this API).
+  Widget _minifigsCard(BrikStaxColors bt, List<Map<String, dynamic>> minifigs, String setNum) => _card(bt, [
+    for (final entry in minifigs)
+      Builder(builder: (context) {
+        final fig    = entry['set_num'] as String? ?? '';
+        final name   = entry['set_name'] as String? ?? fig;
+        final image  = entry['set_img_url'] as String?;
+        final qty    = entry['quantity'] as int? ?? 1;
+        final parts  = entry['num_parts'] as int?;
+        final svc    = context.watch<MinifigService>();
+        final owned  = svc.contains(fig);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: bt.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: bt.cardBorder, width: BT.bw),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: image != null
+                  ? CachedNetworkImage(imageUrl: image, fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Icon(Icons.emoji_people, color: bt.txMuted, size: 16))
+                  : Icon(Icons.emoji_people, color: bt.txMuted, size: 16),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(name, style: BT.body(size: 13, weight: FontWeight.w600, color: bt.tx),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(qty > 1 ? 'x$qty' : fig, style: BT.mono(size: 9, color: bt.tx3)),
+            ])),
+            if (owned)
+              Icon(Icons.check_circle, color: BT.green, size: 20)
+            else
+              GestureDetector(
+                onTap: () => MinifigService.instance.add(Minifig(
+                  id: _uuid.v4(),
+                  figNum: fig,
+                  name: name,
+                  imageUrl: image,
+                  numParts: parts,
+                  fromSetNums: [setNum],
+                  addedAt: DateTime.now(),
+                )),
+                child: Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: BT.yellow,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: BT.ink, width: BT.bw),
+                  ),
+                  child: const Icon(Icons.add, color: BT.ink, size: 16),
+                ),
+              ),
+          ]),
+        );
+      }),
+  ]);
 
   Widget _editableCard(BrikStaxColors bt, List<Widget> rows) => Container(
     decoration: BoxDecoration(

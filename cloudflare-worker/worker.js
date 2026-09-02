@@ -1638,6 +1638,18 @@ var stringToBytes = qrcode.stringToBytes;
 // worker.js
 var EBAY_CACHE_TTL_DAYS = 7;
 var BARCODE_CACHE_TTL_DAYS = 90;
+// BrickEconomy's real cap is 100 requests/day + 4/min -- shared across every
+// install of the app, with no per-user quota concept at all (eBay's own
+// 1350/month cap, by contrast, is ~30-45x more generous). Cap set to 90, not
+// 100, same safety-margin philosophy as EBAY_MONTHLY_CAP below stopping
+// short of eBay's real ceiling. 30-day cache TTL (not eBay's 7) since
+// minifig market values move far slower than set prices, and every day of
+// extra cache life is a day this tiny budget isn't touched at all. Per-
+// minute pacing is enforced via brickeconomy_usage.last_call_at rather than
+// a constant here -- see handleMinifigValue.
+var MINIFIG_VALUE_TTL_DAYS = 30;
+var BRICKECONOMY_DAILY_CAP = 90;
+var BRICKECONOMY_MIN_GAP_MS = 15e3;
 var DAILY_SEED_LIMIT = 40;
 // Brickset's own docs (brickset.com/article/52666) describe a 100
 // getSets-calls/day default tier -- but 2026-08-16 live testing against
@@ -1717,7 +1729,14 @@ async function handleFeatureFlags(env) {
     // `wrangler secret put` / dashboard env var, same mechanism as the two
     // flags above, no app update needed. DevMode users get this regardless
     // of this flag (see PushService.maybeAutoActivate).
-    push_notifications: env.FEATURE_PUSH_NOTIFICATIONS === "true"
+    push_notifications: env.FEATURE_PUSH_NOTIFICATIONS === "true",
+    // Gates only the BrickEconomy value-fetch button (see
+    // minifig_service.dart/FeatureFlagService.minifigValuesEnabled) --
+    // catalog browsing (Rebrickable, free/embedded-key) works regardless of
+    // this flag. Stays "false" until BRICKECONOMY_KEY is provisioned via
+    // `wrangler secret put` and confirmed working -- see handleMinifigValue's
+    // own "API key not configured" guard for the failure mode this prevents.
+    minifig_values: env.FEATURE_MINIFIG_VALUES === "true"
   });
 }
 __name(handleFeatureFlags, "handleFeatureFlags");
@@ -1893,7 +1912,9 @@ var worker_default = {
     if (path === "/ebay/product" && request.method === "GET") return handleEbayProduct(url, env);
     if (path === "/ebay/usage" && request.method === "GET") return handleEbayUsage(env);
     if (path === "/brickset/usage" && request.method === "GET") return handleBricksetUsage(env);
-    if (path === "/admin/activity" && request.method === "GET") return handleAdminActivity(env);
+    if (path === "/brickeconomy/value" && request.method === "GET") return handleMinifigValue(url, env);
+    if (path === "/brickeconomy/usage" && request.method === "GET") return handleBrickeconomyUsage(env);
+    if (path === "/admin/activity" && request.method === "GET") return handleAdminActivity(request, env);
     if (path === "/community/resend" && request.method === "POST") return handleCommunityResend(request, env);
     if (path === "/barcode/cache" && request.method === "POST") return handleBarcodeCache(request, env);
     if (path === "/barcode" && request.method === "GET") return handleBarcode(url, env);
@@ -1906,7 +1927,7 @@ var worker_default = {
     if (path === "/deals/clear" && request.method === "POST") return handleDealsClear(request, env);
     if (path === "/deals/check" && request.method === "GET") return json(await checkSlickdealsForDealCandidates(env));
     if (path === "/qr" && request.method === "GET") return handleQrCode(url);
-    if (path === "/seed/status" && request.method === "GET") return handleSeedStatus(env);
+    if (path === "/seed/status" && request.method === "GET") return handleSeedStatus(request, env);
     if (path === "/seed/run" && request.method === "GET") return handleSeedRun(env);
     if (path === "/seed/errors" && request.method === "GET") return handleSeedErrors(env);
     if (path === "/debug" && request.method === "GET") return handleDebug(url, env);
@@ -2866,11 +2887,19 @@ async function handleBricksetUsage(env) {
 }
 __name(handleBricksetUsage, "handleBricksetUsage");
 // Aggregated read-only activity snapshot for the ops dashboard artifact --
-// no auth (same tier as /seed/status, /brickset/usage, /ebay/usage): only
-// ever returns non-sensitive counts/public content already exposed
-// elsewhere (deal/news titles are public via /deals, /news already;
-// community numbers are counts only, never captions or user_ids).
-async function handleAdminActivity(env) {
+// same x-brikstax-secret gate as /whats-new/all and /community/moderate,
+// added 2026-09-02. NOT because anything it returns is sensitive (still
+// just non-sensitive counts/public content, same as the comment below used
+// to justify no auth at all) -- because every field here costs a real,
+// uncached COUNT(*)/GROUP BY scan of barcode_cache on every single call,
+// and this endpoint had no rate limit or auth of any kind, reachable by
+// anyone who found the bare URL. Contributed real D1 read-quota pressure on
+// top of the (separately fixed) barcode_cache.set_num index gap -- closing
+// this off is cheap insurance regardless of whether it was ever the actual
+// culprit, since nothing in the app or website ever called it anyway.
+async function handleAdminActivity(request, env) {
+  const secret = request.headers.get("x-brikstax-secret");
+  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
   if (!env.PRICE_CACHE) return err("No D1 binding");
   const out = { generated_at: Date.now() };
   try {
@@ -3077,7 +3106,12 @@ async function runSeedBatch(env) {
   return { ok: true, seeded, skipped, errors, processed, queue_remaining: remaining?.cnt ?? 0, discovery: discoveryResult, monthly_catchup: monthlyCatchup, brickset_calls_today: usedToday, brickset_seed_budget: BRICKSET_SEED_DAILY_BUDGET, budget_exhausted: budgetExhausted };
 }
 __name(runSeedBatch, "runSeedBatch");
-async function handleSeedStatus(env) {
+// Same x-brikstax-secret gate as handleAdminActivity, added 2026-09-02 --
+// see that function's comment for why (uncached COUNT(*) scans of
+// barcode_cache on every call, previously reachable with no auth at all).
+async function handleSeedStatus(request, env) {
+  const secret = request.headers.get("x-brikstax-secret");
+  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
   if (!env.PRICE_CACHE) return err("No D1 binding");
   try {
     const progress = await env.PRICE_CACHE.prepare("SELECT * FROM seed_progress WHERE id = 1").first();
@@ -3402,6 +3436,157 @@ async function checkEbayCache(url, env) {
   }
 }
 __name(checkEbayCache, "checkEbayCache");
+// ── Minifig market values (BrickEconomy, via the same D1 binding) ─────────
+// Same self-healing CREATE TABLE IF NOT EXISTS shape as ensureEbayUsageTable/
+// ensureBricksetUsageTable -- see that pair's own comments for why this
+// pattern exists at all (an earlier table, ebay_usage, silently never
+// existed for a long time because nothing ever created it). fig_num as the
+// PRIMARY KEY covers the only lookup this table ever does -- no separate
+// index needed, unlike barcode_cache.set_num's missing-index incident.
+async function ensureMinifigValueTable(env) {
+  try {
+    await env.PRICE_CACHE.prepare(
+      "CREATE TABLE IF NOT EXISTS minifig_value_cache (fig_num TEXT PRIMARY KEY, value_usd REAL, fetched_at INTEGER NOT NULL, zero_result INTEGER NOT NULL DEFAULT 0)"
+    ).run();
+  } catch (e) {
+    console.error("ensureMinifigValueTable failed:", e.message);
+  }
+}
+__name(ensureMinifigValueTable, "ensureMinifigValueTable");
+// Day-keyed like brickset_usage (BrickEconomy's cap is daily), plus
+// last_call_at for the 4/min sub-limit brickset_usage has no equivalent of --
+// see handleMinifigValue's pacing step for how that column is actually used.
+async function ensureBrickeconomyUsageTable(env) {
+  try {
+    await env.PRICE_CACHE.prepare(
+      "CREATE TABLE IF NOT EXISTS brickeconomy_usage (day_key TEXT PRIMARY KEY, call_count INTEGER NOT NULL DEFAULT 0, last_call_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)"
+    ).run();
+  } catch (e) {
+    console.error("ensureBrickeconomyUsageTable failed:", e.message);
+  }
+}
+__name(ensureBrickeconomyUsageTable, "ensureBrickeconomyUsageTable");
+// GET /brickeconomy/value?fig=<fig_num> -- deliberately GET with a query
+// param, not POST like handleEbay, since there's no request body beyond the
+// identifier (see api.dart's fetchMinifigValue). Order of operations
+// mirrors handleEbay exactly: cache check (no budget spent on a hit) ->
+// daily budget check -> per-minute pacing -> live call -> increment usage ->
+// write cache. Callers on the client side are expected to only ever reach
+// this from one explicit "Check current value" button tap per minifig --
+// see MinifigService.refreshValue's own doc comment -- there is deliberately
+// no bulk/"refresh all" path and no client-settable force flag (unlike
+// eBay's dev-only force:true) given how much smaller this budget is.
+async function handleMinifigValue(url, env) {
+  if (!env.PRICE_CACHE) return err("No D1 binding");
+  await ensureMinifigValueTable(env);
+  await ensureBrickeconomyUsageTable(env);
+  const figNum = url.searchParams.get("fig");
+  if (!figNum) return err("Missing fig param");
+  try {
+    const cached = await env.PRICE_CACHE.prepare(
+      "SELECT * FROM minifig_value_cache WHERE fig_num = ?"
+    ).bind(figNum).first();
+    if (cached) {
+      const ageMs = Date.now() - cached.fetched_at;
+      if (ageMs < MINIFIG_VALUE_TTL_DAYS * 864e5) {
+        return json({ source: "cache", age_hours: Math.round(ageMs / 36e5), value_usd: cached.value_usd, zero_result: !!cached.zero_result });
+      }
+    }
+  } catch (e) {
+    console.error("D1 minifig value read:", e.message);
+  }
+  const dayKey = todayKey();
+  let usage;
+  try {
+    usage = await env.PRICE_CACHE.prepare(
+      "SELECT call_count, last_call_at FROM brickeconomy_usage WHERE day_key = ?"
+    ).bind(dayKey).first();
+  } catch (e) {
+    console.error("brickeconomy_usage read failed:", e.message);
+  }
+  if (usage && usage.call_count >= BRICKECONOMY_DAILY_CAP) {
+    return err("brickeconomy_daily_cap_reached", 429);
+  }
+  // Best-effort pacing, not a perfectly atomic distributed lock (D1 has no
+  // simple read-then-write-with-lock primitive here) -- acceptable given the
+  // real traffic shape (individual button taps, not a hot loop). A wait
+  // under 8s is absorbed inline; anything longer fails fast rather than
+  // holding the request open indefinitely.
+  const sinceLastMs = usage ? Date.now() - usage.last_call_at : Infinity;
+  if (sinceLastMs < BRICKECONOMY_MIN_GAP_MS) {
+    const waitMs = BRICKECONOMY_MIN_GAP_MS - sinceLastMs;
+    if (waitMs > 8e3) return err("brickeconomy_busy_try_again", 429);
+    await sleep(waitMs);
+  }
+  const beKey = env.BRICKECONOMY_KEY;
+  if (!beKey) return err("BrickEconomy API key not configured", 500);
+  let valueUsd = null;
+  let zeroResult = false;
+  try {
+    const resp = await fetch(`https://www.brickeconomy.com/api/v1/minifig/${encodeURIComponent(figNum)}`, {
+      headers: { Authorization: `Bearer ${beKey}`, Accept: "application/json" }
+    });
+    if (resp.status === 429) return err("rate_limited", 429);
+    if (resp.status === 404) {
+      zeroResult = true;
+    } else if (!resp.ok) {
+      return err(`BrickEconomy HTTP ${resp.status}`, 502);
+    } else {
+      // Field name is a best guess (value_new/current_value/value) -- the
+      // real BrickEconomy response shape hasn't been seen yet, since no key
+      // is provisioned. First live call after `wrangler secret put
+      // BRICKECONOMY_KEY` should log `d` (temporarily) and confirm/correct
+      // this against the actual JSON before relying on it for real.
+      const d = await resp.json();
+      valueUsd = parseFloat(d.value_new ?? d.current_value ?? d.value) || null;
+      zeroResult = valueUsd === null;
+    }
+  } catch (e) {
+    return err(`BrickEconomy fetch failed: ${e.message}`, 502);
+  }
+  try {
+    await env.PRICE_CACHE.prepare(`
+      INSERT INTO brickeconomy_usage (day_key, call_count, last_call_at, updated_at)
+      VALUES (?, 1, ?, ?)
+      ON CONFLICT(day_key) DO UPDATE SET
+        call_count = call_count + 1, last_call_at = excluded.last_call_at, updated_at = excluded.updated_at
+    `).bind(dayKey, Date.now(), Date.now()).run();
+  } catch (e) {
+    console.error("brickeconomy_usage increment failed:", e.message);
+  }
+  try {
+    await env.PRICE_CACHE.prepare(`
+      INSERT INTO minifig_value_cache (fig_num, value_usd, fetched_at, zero_result)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(fig_num) DO UPDATE SET value_usd = excluded.value_usd, fetched_at = excluded.fetched_at, zero_result = excluded.zero_result
+    `).bind(figNum, valueUsd, Date.now(), zeroResult ? 1 : 0).run();
+  } catch (e) {
+    console.error("D1 minifig value write:", e.message);
+  }
+  return json({ source: "live", age_hours: 0, value_usd: valueUsd, zero_result: zeroResult });
+}
+__name(handleMinifigValue, "handleMinifigValue");
+// Read-only, unauthenticated -- same tier as /ebay/usage and /brickset/usage
+// (no sensitive data, just counts) -- lets Settings show the shared daily
+// budget instead of the app silently hitting brickeconomy_daily_cap_reached
+// with no visibility into why, the same kind of surprise a missing index on
+// barcode_cache already caused once for the D1 read quota.
+async function handleBrickeconomyUsage(env) {
+  if (!env.PRICE_CACHE) return err("No D1 binding");
+  await ensureBrickeconomyUsageTable(env);
+  const dayKey = todayKey();
+  let calls = 0;
+  try {
+    const row = await env.PRICE_CACHE.prepare(
+      "SELECT call_count FROM brickeconomy_usage WHERE day_key = ?"
+    ).bind(dayKey).first();
+    calls = row?.call_count ?? 0;
+  } catch (e) {
+    console.error("brickeconomy usage read failed:", e.message);
+  }
+  return json({ day: dayKey, calls, cap: BRICKECONOMY_DAILY_CAP, remaining: Math.max(0, BRICKECONOMY_DAILY_CAP - calls), blocked: calls >= BRICKECONOMY_DAILY_CAP });
+}
+__name(handleBrickeconomyUsage, "handleBrickeconomyUsage");
 async function handleDebug(url, env) {
   const bsKey = env.BRICKSET_KEY || BRICKSET_KEY_FALLBACK;
   const setNum = url.searchParams.get("set") || "75192";

@@ -29,6 +29,7 @@ class FeatureFlagService extends ChangeNotifier {
   bool   _communityFeedEnabled = false;
   bool   _scannerEnabled       = false;
   bool   _pushNotificationsEnabled = false;
+  bool   _minifigValuesEnabled = false;
   String? _communityBanner;
   bool   _loaded               = false;
 
@@ -37,6 +38,11 @@ class FeatureFlagService extends ChangeNotifier {
   /// Gates PushService's silent auto-activation for real (non-dev) users --
   /// see that file's doc comment. DevMode users bypass this flag entirely.
   bool    get pushNotificationsEnabled => _pushNotificationsEnabled;
+  /// Gates only MinifigService's BrickEconomy "Check current value" button --
+  /// catalog browsing (Rebrickable) works regardless. Off by default until
+  /// BRICKECONOMY_KEY is provisioned on the Worker and this flag is flipped
+  /// on, same zero-app-update mechanism as the other flags here.
+  bool    get minifigValuesEnabled => _minifigValuesEnabled;
   /// Free-text notice for the Community feed, or null when there isn't one.
   /// Already trimmed; an empty/whitespace-only value from the Worker is
   /// treated the same as unset so a stray space in the dashboard field
@@ -56,6 +62,7 @@ class FeatureFlagService extends ChangeNotifier {
         _communityFeedEnabled = data['community_feed'] == true;
         _scannerEnabled       = data['scanner'] == true;
         _pushNotificationsEnabled = data['push_notifications'] == true;
+        _minifigValuesEnabled = data['minifig_values'] == true;
         final banner = (data['community_banner'] as String?)?.trim();
         _communityBanner = (banner != null && banner.isNotEmpty) ? banner : null;
       }

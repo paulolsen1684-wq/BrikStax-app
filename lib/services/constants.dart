@@ -29,6 +29,13 @@ class K {
   // Business rules
   static const insiderPointsRate    = 0.05;   // 5% LEGO Insider
   static const ebayStaleAfterDays   = 7;       // re-fetch after 7 days
+  // Minifig values (BrickEconomy) get a much longer TTL than eBay's -- the
+  // shared server-side budget is only 100 requests/day across every install
+  // (see brikstax-worker's BRICKECONOMY_DAILY_CAP), so this is a client-side
+  // staleness *indicator* only, never an auto-refresh trigger. A stale badge
+  // just means "tap Check current value if you want a fresher number,"
+  // exactly the opposite of eBay's staleness driving an automatic refresh.
+  static const minifigValueStaleAfterDays = 30;
   static const rbThemeCacheTtlDays  = 30;      // theme names rarely change
   static const priceHistoryMaxPoints= 52;      // ~1 year of weekly fetches
 

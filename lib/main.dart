@@ -10,6 +10,7 @@ import 'modules/avatar/services/dev_mode.dart';
 import 'modules/avatar/services/daily_five_service.dart';
 import 'providers/collection.dart';
 import 'services/wishlist_service.dart';
+import 'services/minifig_service.dart';
 import 'modules/community/services/community_service.dart';
 import 'services/feature_flag_service.dart';
 import 'services/device_identity.dart';
@@ -68,6 +69,7 @@ void main() async {
       await LocalNotificationService.instance.restoreOptedIn();
       await HiddenThemeService.instance.init();
       await WishlistService.instance.init();
+      await MinifigService.instance.init();
       await ThemeService.instance.init();
       await FeatureFlagService.instance.init();
       await DeviceIdentity.instance.init();
@@ -79,6 +81,7 @@ void main() async {
             ChangeNotifierProvider(create: (_) => CollectionProvider()..init()),
             ChangeNotifierProvider.value(value: WishlistService.instance),
             ChangeNotifierProvider.value(value: CommunityService.instance),
+            ChangeNotifierProvider.value(value: MinifigService.instance),
           ],
           child: const BrikStaxApp(),
         ),

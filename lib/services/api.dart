@@ -224,6 +224,64 @@ class Api {
     return results;
   }
 
+  // ── Rebrickable minifigs ───────────────────────────────────────────────────
+  // Catalog/identity data only -- free, embedded key, no gating needed
+  // (unlike fetchMinifigValue below, which is scarce and Worker-proxied).
+
+  /// Single minifig lookup by Rebrickable's own fig_num (e.g. "fig-000001"
+  /// -- NOT BrickLink's "sw0001"-style scheme; the two catalogs use
+  /// different identifiers for the same physical minifig). Same
+  /// null-on-failure shape as fetchSet.
+  Future<Map<String, dynamic>?> fetchMinifig(String figNum) async {
+    return await _get(
+      Uri.parse('https://rebrickable.com/api/v3/lego/minifigs/$figNum/'),
+      headers: {'Authorization': 'key ${K.rbKey}'},
+    );
+  }
+
+  /// Every minifig that comes in a given set. Paginated like
+  /// fetchUserCollection, though sets rarely have more than a handful.
+  Future<List<Map<String, dynamic>>> fetchSetMinifigs(String setNum) async {
+    final sn = setNum.contains('-') ? setNum : '$setNum-1';
+    final results = <Map<String, dynamic>>[];
+    String? nextUrl =
+        'https://rebrickable.com/api/v3/lego/sets/$sn/minifigs/?page_size=50';
+    while (nextUrl != null) {
+      final d = await _get(Uri.parse(nextUrl),
+          headers: {'Authorization': 'key ${K.rbKey}'});
+      if (d == null) break;
+      results.addAll(
+          (d['results'] as List? ?? []).cast<Map<String, dynamic>>());
+      nextUrl = d['next'] as String?;
+    }
+    return results;
+  }
+
+  // ── Minifig values via Cloudflare Worker + D1 cache ───────────────────────
+  // The Worker holds the BrickEconomy bearer token server-side. Its shared
+  // daily budget (100/day, 4/min real cap, enforced at 90/day here) is FAR
+  // tighter than eBay's -- see handleMinifigValue in cloudflare-worker/
+  // worker.js. Deliberately no `force` param (unlike fetchEbay) -- there's
+  // no safe "bulk refresh" use case here, only ever call this from one
+  // explicit per-minifig user action. Worker endpoint: GET
+  // {workerUrl}brickeconomy/value?fig=<figNum>
+  // Response: { source, value_usd, zero_result, age_hours }
+
+  Future<Map<String, dynamic>?> fetchMinifigValue(String figNum) async {
+    final endpoint = Uri.parse(
+        '${K.workerUrl}brickeconomy/value?fig=${Uri.encodeComponent(figNum)}');
+    try {
+      final r = await _client.get(endpoint).timeout(const Duration(seconds: 15));
+      if (r.statusCode == 429) throw ApiException('rate_limited');
+      if (r.statusCode != 200) throw ApiException('http_${r.statusCode}');
+      return jsonDecode(r.body) as Map<String, dynamic>;
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw ApiException('network_error');
+    }
+  }
+
   // ── BrickSet retail (direct call — no proxy needed) ───────────────────────
 
   Future<double?> fetchRetail(String num) async {

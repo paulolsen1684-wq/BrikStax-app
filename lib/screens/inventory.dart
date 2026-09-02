@@ -9,6 +9,7 @@ import '../widgets/set_card.dart';
 import 'add_set.dart';
 import 'set_detail.dart';
 import 'collection_share_screen.dart';
+import 'minifig_collection_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -116,6 +117,27 @@ class _State extends State<InventoryScreen> {
                                 offset: const Offset(2, 2))],
                           ),
                           child: Icon(Icons.ios_share, color: bt.tx, size: 18),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Entry point into the minifig collection -- lives
+                      // here rather than a new bottom-nav tab (a deliberate
+                      // placement decision) so it stays a lightweight corner
+                      // of the existing Sets tab instead of competing for
+                      // nav-bar real estate.
+                      GestureDetector(
+                        onTap: () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => const MinifigCollectionScreen())),
+                        child: Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            color: bt.cardBg,
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: bt.cardBorder, width: BT.bw),
+                            boxShadow: [BoxShadow(color: bt.shadowColor,
+                                offset: const Offset(2, 2))],
+                          ),
+                          child: Icon(Icons.emoji_people, color: bt.tx, size: 18),
                         ),
                       ),
                       const SizedBox(width: 8),

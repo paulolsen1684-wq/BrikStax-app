@@ -88,9 +88,9 @@ class WishlistItem {
       name:          j['name'] as String? ?? '',
       imageUrl:      j['img']  as String?,
       theme:         j['theme'] as String?,
-      retailPrice:   (j['retail']  as dynamic?)?.toDouble(),
-      targetPrice:   (j['target']  as dynamic?)?.toDouble(),
-      currentPrice:  (j['current'] as dynamic?)?.toDouble(),
+      retailPrice:   (j['retail']  as dynamic)?.toDouble(),
+      targetPrice:   (j['target']  as dynamic)?.toDouble(),
+      currentPrice:  (j['current'] as dynamic)?.toDouble(),
       lastChecked:   j['checked'] != null
           ? DateTime.fromMillisecondsSinceEpoch(j['checked'] as int)
           : null,

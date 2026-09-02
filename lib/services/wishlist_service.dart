@@ -128,7 +128,7 @@ class WishlistService extends ChangeNotifier {
       ).timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        price = (data['avg'] as dynamic?)?.toDouble();
+        price = (data['avg'] as dynamic)?.toDouble();
       }
     } catch (_) {}
 

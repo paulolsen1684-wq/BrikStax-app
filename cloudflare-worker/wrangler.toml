@@ -18,6 +18,11 @@
 # works as-is for redeploying code/config changes. They'd only need
 # re-entering (via `wrangler secret put <NAME>`) if this worker were ever
 # recreated from scratch.
+#
+# BRICKECONOMY_KEY is a new one, added for the minifig-value feature -- it
+# does NOT exist on the live worker yet. Run `wrangler secret put
+# BRICKECONOMY_KEY` (from this directory) to provision it; FEATURE_MINIFIG_
+# VALUES below stays "false" until that's done and confirmed working.
 
 name = "brikstax-worker"
 main = "worker.js"
@@ -60,3 +65,7 @@ bucket_name = "brikstax-community-photo"
 FEATURE_COMMUNITY_FEED = "true"
 FEATURE_SCANNER = "true"
 COMMUNITY_BANNER = "📸 Share a photo of your sets — approved posts appear here, and every like you get earns Briks for the shop!"
+# Off until BRICKECONOMY_KEY (a secret, NOT a var -- see `wrangler secret put`
+# below) is provisioned and confirmed working. Gates only the value-fetch
+# button in the minifig feature; catalog browsing works regardless.
+FEATURE_MINIFIG_VALUES = "false"
