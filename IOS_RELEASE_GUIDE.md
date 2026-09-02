@@ -108,12 +108,13 @@ That's it — from here it's Apple's review queue (historically anywhere from a 
 ```
 What's New in BrikStax 2.4.0:
 
-• New Post sharing format — square-friendly for your feed, alongside the original Story format
-• Choose exactly how your photo crops before sharing, with a new composition guide
-• Community feed photos now show in a taller, Instagram-style layout
-• New in-app rewards to discover — check out "What's New" after updating
-• Fresh avatar cosmetics, plus general polish and bug fixes
+• Track your LEGO minifigs — look up any official minifig, add it to your own collection, and see which ones come in sets you already own
+• New limited-time avatar rewards each week — check "What's New" after updating
+• Better-fitting avatar items across the board
+• General polish and bug fixes
 ```
+
+(Matches `ANDROID_RELEASE_NOTES.md` — keep both in sync when either changes.)
 
 ---
 
