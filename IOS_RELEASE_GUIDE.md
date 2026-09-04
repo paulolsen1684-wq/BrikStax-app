@@ -1,10 +1,10 @@
 # iOS Release Guide
 
-Step-by-step for building, archiving, and submitting a BrikStax release on the Mac. Written for v2.4.0+10, but the process itself is the same every release — just swap in the new version's details each time.
+Step-by-step for building, archiving, and submitting a BrikStax release on the Mac. Written for v2.4.1+11, but the process itself is the same every release — just swap in the new version's details each time.
 
 ## This release
 
-- **Version:** 2.4.0+10 (`pubspec.yaml`)
+- **Version:** 2.4.1+11 (`pubspec.yaml`) — bumped from 2.4.0+11 after App Store Connect rejected it: a 2.4.0 was already approved previously, so CFBundleShortVersionString has to be a genuinely higher marketing version, not just a higher build number.
 - **Branch to pull:** `main`. (Standing rule: always merge into `main` before a release build — never ship from a feature branch.)
 - **What's New copy:** see the bottom of this doc — already written, just paste it in.
 
@@ -55,7 +55,7 @@ Opening `Runner.xcodeproj` directly instead of the `.xcworkspace` is the single 
 
 In Xcode, select the **Runner** target → **General** tab:
 
-- [ ] **Version** shows `2.4.0` and **Build** shows `10` (or whatever this release's numbers are — Flutter should sync these from `pubspec.yaml` automatically, but confirm rather than assume, especially after a `flutter clean`).
+- [ ] **Version** shows `2.4.1` and **Build** shows `11` (or whatever this release's numbers are — Flutter should sync these from `pubspec.yaml` automatically, but confirm rather than assume, especially after a `flutter clean`).
 - [ ] **Bundle Identifier** is `com.brikstax.brikstax` — should already be set correctly (it's what's checked into the project file), but confirm it matches the app record you're targeting in App Store Connect.
 
 Then **Signing & Capabilities** tab:
@@ -92,10 +92,10 @@ This release has a lot of surface area — push notification infrastructure (eve
 
 In App Store Connect → your app → **App Store** tab:
 
-- [ ] Create a new version if one doesn't already exist for 2.4.0 (**+ Version or Platform**).
+- [ ] Create a new version if one doesn't already exist for 2.4.1 (**+ Version or Platform**).
 - [ ] Under **Build**, select the build you just uploaded (it'll appear here once processing finishes — not before).
 - [ ] Paste the **What's New in This Version** text — see below.
-- [ ] Screenshots: not required to change for this release unless you want to show off the new Post share format specifically — existing screenshots are still accurate to the app's core flows.
+- [ ] Screenshots: not required to change for this release — nothing in this update changes the app's core visible flows enough to need new ones.
 - [ ] **Export Compliance**: if asked, this app only uses standard HTTPS/TLS (no custom encryption) — answer the same way as the last submission (typically "No" to needing an export compliance document, since standard HTTPS is exempt).
 - [ ] Click **Add for Review**, then **Submit to App Review**.
 
@@ -106,7 +106,7 @@ That's it — from here it's Apple's review queue (historically anywhere from a 
 ## What's New in This Version (paste into App Store Connect)
 
 ```
-What's New in BrikStax 2.4.0:
+What's New in BrikStax 2.4.1:
 
 • Track your LEGO minifigs — look up any official minifig, add it to your own collection, and see which ones come in sets you already own
 • New limited-time avatar rewards each week — check "What's New" after updating

@@ -2,7 +2,7 @@
 
 Paste-ready text for Play Console's **App content → Store presence → Main store listing → Release notes** field (per-release, under **Production → Create new release**). Play Store enforces a 500-character limit per language — the block below is well under that.
 
-## v2.4.0+11 (current)
+## v2.4.1+11 (current)
 
 ```
 • Track your LEGO minifigs — look up any official minifig, add it to your own collection, and see which ones come in sets you already own
