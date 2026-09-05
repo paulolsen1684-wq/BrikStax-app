@@ -10,6 +10,7 @@
 // existing 5-tier CosmeticRarity economy rather than needing a second one.
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../../providers/collection.dart';
@@ -82,7 +83,21 @@ List<_RewardEntry> get _rewardPool => [
       .map((c) => _RewardEntry(c.id, c.rarity.asCosmeticRarity)),
 ];
 
-class LootService {
+// extends ChangeNotifier as of 2026-09-05 -- this class previously had no
+// way to tell anything it had changed, which meant every screen showing
+// derived state (briks, streak.canClaim, unlocked bundles) had to remember
+// to force its own rebuild by hand after any call here. Real bug this
+// caused: dashboard_avatar_card.dart's DailyBrickClaimCard listened to
+// AchievementService instead (the wrong service) since that's what its
+// ListenableBuilder happened to be wrapped in already -- it only looked
+// correct because claimDaily() also touches AchievementService on a
+// non-dupe roll. On a DUPE roll (paid out as Briks instead, AchievementService
+// untouched) the card never rebuilt at all, staying stuck on "Claim" even
+// though the claim had actually gone through. Every public method that
+// mutates streak/briks/unlockedBundles now calls notifyListeners() at the
+// end so ListenableBuilder/context.watch can depend on this service
+// directly instead of piggybacking on a different one's notifications.
+class LootService extends ChangeNotifier {
   LootService._();
   static final instance = LootService._();
 
@@ -258,8 +273,16 @@ class LootService {
         _briks = wRows.first['briks'] as int;
       }
     } catch (_) {}
+    notifyListeners();
   }
 
+  // All three save helpers notify at the end, after the write attempt --
+  // whether or not persistence actually succeeds, the in-memory state (what
+  // every listener actually reads) has already changed by the time any of
+  // these is called, so the UI should reflect it regardless. This is also
+  // the one shared choke point every public mutator (claimDaily, addBriks,
+  // spendBriks, equipBundle, unlockBundle, etc.) already passes through, so
+  // notifying here covers all of them without needing a call in each.
   Future<void> _saveStreak() async {
     try {
       final db = await _database;
@@ -267,6 +290,7 @@ class LootService {
           {'id': 1, 'data': jsonEncode(_streak.toJson())},
           conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (_) {}
+    notifyListeners();
   }
 
   Future<void> _saveBundles() async {
@@ -276,6 +300,7 @@ class LootService {
           {'id': 1, 'data': jsonEncode(_unlockedBundles.toList())},
           conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (_) {}
+    notifyListeners();
   }
 
   Future<void> _saveBriks() async {
@@ -284,6 +309,7 @@ class LootService {
       await db.insert('wallet', {'id': 1, 'briks': _briks},
           conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (_) {}
+    notifyListeners();
   }
 
   Future<void> addBriks(int n) async {

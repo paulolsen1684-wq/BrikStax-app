@@ -169,8 +169,16 @@ class DailyBrickClaimCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final bt = context.bt;
 
+    // Listens to BOTH services now (2026-09-05 fix) -- this card shows
+    // LootService's streak/canClaim, but used to only listen to
+    // AchievementService, which claimDaily() only happens to touch on a
+    // non-dupe roll. On a dupe (paid out as Briks instead) AchievementService
+    // never fired, so this card kept showing "Claim" after a real claim had
+    // already gone through. LootService is a real ChangeNotifier now (see
+    // its own class doc comment), so it can be merged in directly.
     return ListenableBuilder(
-      listenable: AchievementService.instance,
+      listenable: Listenable.merge(
+          [AchievementService.instance, LootService.instance]),
       builder: (_, __) {
         final streak   = LootService.instance.streak;
         final canClaim = streak.canClaim;
