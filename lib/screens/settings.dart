@@ -591,7 +591,9 @@ class _State extends State<SettingsScreen> {
                 child: FutureBuilder<PackageInfo>(
                   future: PackageInfo.fromPlatform(),
                   builder: (_, snap) => Text(
-                      snap.hasData ? 'v${snap.data!.version}' : '',
+                      snap.hasData
+                          ? 'v${snap.data!.version} (${snap.data!.buildNumber})'
+                          : '',
                       style: BT.mono(size: 10, color: BT.ink)),
                 ),
               ),
