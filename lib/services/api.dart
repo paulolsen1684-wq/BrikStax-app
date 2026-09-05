@@ -232,9 +232,19 @@ class Api {
   /// -- NOT BrickLink's "sw0001"-style scheme; the two catalogs use
   /// different identifiers for the same physical minifig). Same
   /// null-on-failure shape as fetchSet.
+  ///
+  /// figNum is encoded before reaching Uri.parse -- previously interpolated
+  /// raw, which meant a stray space/'#'/'?' in the id would either throw
+  /// (uncaught, since Uri.parse runs as an argument expression BEFORE _get's
+  /// own try/catch is ever entered -- Dart evaluates call arguments first)
+  /// or silently truncate the path. Not actually reachable from the search
+  /// screen below (users no longer type a fig_num by hand there), but this
+  /// method is still public API surface -- fixed regardless of what
+  /// currently calls it.
   Future<Map<String, dynamic>?> fetchMinifig(String figNum) async {
+    final encoded = Uri.encodeComponent(figNum);
     return await _get(
-      Uri.parse('https://rebrickable.com/api/v3/lego/minifigs/$figNum/'),
+      Uri.parse('https://rebrickable.com/api/v3/lego/minifigs/$encoded/'),
       headers: {'Authorization': 'key ${K.rbKey}'},
     );
   }
@@ -254,6 +264,52 @@ class Api {
           (d['results'] as List? ?? []).cast<Map<String, dynamic>>());
       nextUrl = d['next'] as String?;
     }
+    return results;
+  }
+
+  /// Name/theme search over the whole minifig catalog -- confirmed against
+  /// Rebrickable's real OpenAPI spec: `search` (free text) and
+  /// `in_theme_id` both work as real query params on this endpoint (there's
+  /// no min/max year for minifigs, only sets have that). Capped at one page
+  /// (pageSize results) rather than paginating fully like fetchSetMinifigs
+  /// -- this is a live-as-you-type search, not a bounded "everything in one
+  /// set" list, so an unbounded result set isn't something a caller should
+  /// ever fully consume.
+  Future<List<Map<String, dynamic>>> searchMinifigs({
+    String? name,
+    int? themeId,
+    int pageSize = 40,
+  }) async {
+    final params = <String, String>{'page_size': '$pageSize'};
+    if (name != null && name.trim().isNotEmpty) params['search'] = name.trim();
+    if (themeId != null) params['in_theme_id'] = '$themeId';
+    final uri = Uri.parse('https://rebrickable.com/api/v3/lego/minifigs/')
+        .replace(queryParameters: params);
+    final d = await _get(uri, headers: {'Authorization': 'key ${K.rbKey}'});
+    if (d == null) return const [];
+    return (d['results'] as List? ?? []).cast<Map<String, dynamic>>();
+  }
+
+  /// Top-level LEGO themes only (parent_id null) -- for the minifig search
+  /// screen's "Other" full-theme fallback picker, once the curated shortlist
+  /// doesn't have what someone's looking for. Rebrickable's theme tree runs
+  /// several hundred entries total once subthemes are included; filtering
+  /// to top-level keeps this to a genuinely browsable list (~50-80 entries)
+  /// rather than the whole tree.
+  Future<List<Map<String, dynamic>>> fetchTopLevelThemes() async {
+    final results = <Map<String, dynamic>>[];
+    String? nextUrl = 'https://rebrickable.com/api/v3/lego/themes/?page_size=200';
+    while (nextUrl != null) {
+      final d = await _get(Uri.parse(nextUrl),
+          headers: {'Authorization': 'key ${K.rbKey}'});
+      if (d == null) break;
+      results.addAll((d['results'] as List? ?? [])
+          .cast<Map<String, dynamic>>()
+          .where((t) => t['parent_id'] == null));
+      nextUrl = d['next'] as String?;
+    }
+    results.sort((a, b) =>
+        (a['name'] as String? ?? '').compareTo(b['name'] as String? ?? ''));
     return results;
   }
 
