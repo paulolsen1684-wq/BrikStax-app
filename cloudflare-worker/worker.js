@@ -1928,8 +1928,8 @@ var worker_default = {
     if (path === "/deals/check" && request.method === "GET") return json(await checkSlickdealsForDealCandidates(env));
     if (path === "/qr" && request.method === "GET") return handleQrCode(url);
     if (path === "/seed/status" && request.method === "GET") return handleSeedStatus(request, env);
-    if (path === "/seed/run" && request.method === "GET") return handleSeedRun(env);
-    if (path === "/seed/errors" && request.method === "GET") return handleSeedErrors(env);
+    if (path === "/seed/run" && request.method === "GET") return handleSeedRun(request, env);
+    if (path === "/seed/errors" && request.method === "GET") return handleSeedErrors(request, env);
     if (path === "/debug" && request.method === "GET") return handleDebug(url, env);
     if (path === "/discord" && request.method === "POST") return handleDiscord(request, env, ctx);
     if (path === "/" || path === "") return handleProxy(url);
@@ -3124,11 +3124,20 @@ async function handleSeedStatus(request, env) {
   }
 }
 __name(handleSeedStatus, "handleSeedStatus");
-async function handleSeedRun(env) {
+// Same x-brikstax-secret gate as handleAdminActivity/handleSeedStatus, added
+// after a code review caught this one and handleSeedErrors below being
+// missed in that same pass -- this one especially, since unlike the other
+// two (read-only), a bare GET here actually TRIGGERS a real seed batch:
+// live BrickSet calls and D1 writes, on demand, for anyone with the URL.
+async function handleSeedRun(request, env) {
+  const secret = request.headers.get("x-brikstax-secret");
+  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
   return json(await runSeedBatch(env));
 }
 __name(handleSeedRun, "handleSeedRun");
-async function handleSeedErrors(env) {
+async function handleSeedErrors(request, env) {
+  const secret = request.headers.get("x-brikstax-secret");
+  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
   if (!env.PRICE_CACHE) return err("No D1 binding");
   try {
     const rows = await env.PRICE_CACHE.prepare("SELECT * FROM seed_errors ORDER BY occurred_at DESC LIMIT 30").all();

@@ -497,9 +497,25 @@ class _State extends State<PixelItemTunerScreen> {
       ..sort((a, b) => a.defaultZ.compareTo(b.defaultZ));
     final behind = others.where((s) => s.defaultZ > effective).map((s) => s.name);
     final infront = others.where((s) => s.defaultZ < effective).map((s) => s.name);
+    // A tie on effectiveZ doesn't mean "no interaction" -- the real sort
+    // still resolves it, via each slot's own fixed insertion index (which
+    // happens to equal that slot's defaultZ, always, regardless of any
+    // zOrder override -- see pixel_avatar_widget.dart's build()). Missing
+    // this case is exactly what let three shipped items end up with a
+    // silently-broken or no-op override: this readout used to just omit a
+    // tied slot from the description entirely, showing no interaction at
+    // all where the real renderer had a fixed, non-obvious one.
+    final tiedBehind = others
+        .where((s) => s.defaultZ == effective && selected.slot.defaultZ < s.defaultZ)
+        .map((s) => s.name);
+    final tiedFront = others
+        .where((s) => s.defaultZ == effective && selected.slot.defaultZ > s.defaultZ)
+        .map((s) => s.name);
     final desc = [
       if (infront.isNotEmpty) 'in front of ${infront.join(", ")}',
       if (behind.isNotEmpty) 'behind ${behind.join(", ")}',
+      if (tiedFront.isNotEmpty) 'tied+front of ${tiedFront.join(", ")}',
+      if (tiedBehind.isNotEmpty) 'tied+behind ${tiedBehind.join(", ")}',
     ].join(' · ');
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),

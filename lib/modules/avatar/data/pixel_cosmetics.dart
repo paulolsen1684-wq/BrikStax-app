@@ -220,7 +220,12 @@ const List<PixelCosmetic> allPixelCosmetics = [
     offsetX: -0.06, offsetY: 9.15, scale: 1.320,
   ),
   PixelCosmetic(id: 'px_hat_spacemanhelmet', name: 'Classic Spaceman Helmet', slot: PixelSlot.hat, rarity: PixelRarity.common, description: 'Standard issue for anyone brave enough to leave the launchpad.', assetPath: 'assets/avatar_pixel/hats/hat_21_spacemanhelmet.png',
-    offsetX: 0.13, offsetY: 7.39, scale: 1.500, zOrder: 4,
+    // zOrder was tuned to 4 (item's own defaultZ) -- ties, and the sort's
+    // insertion-index tiebreak resolved that tie right back to hat's normal
+    // behind-item position, making the override a silent no-op. Bumped to 5
+    // (strictly above item's 4) to actually deliver what tying at 4 was
+    // clearly reaching for: paint in front of an equipped item.
+    offsetX: 0.13, offsetY: 7.39, scale: 1.500, zOrder: 5,
   ),
 
   // Legendary/secret tier -- first entries with real animation frames
@@ -544,7 +549,12 @@ const List<PixelCosmetic> allPixelCosmetics = [
     id: 'px_item_quest_pokball', name: 'Poké Ball Charm', slot: PixelSlot.item,
     rarity: PixelRarity.epic, isQuestExclusive: true,
     assetPath: 'assets/avatar_pixel/items/item_quest_pokball.png',
-    offsetX: -41.48, offsetY: -15.52, scale: 1.300, zOrder: 1,
+    // Repositioned onto the chest (large negative offsets) to read as a worn
+    // charm/pendant, but zOrder:1 left it painting behind torso(2)/hat(3) --
+    // defeating the point, since it'd render hidden. Bumped to 5 (above
+    // every other slot's default) so it actually sits in front once moved
+    // onto the body.
+    offsetX: -41.48, offsetY: -15.52, scale: 1.300, zOrder: 5,
   ),
   PixelCosmetic(
     id: 'px_item_quest_energy', name: 'Energy Charm', slot: PixelSlot.item,
@@ -568,7 +578,9 @@ const List<PixelCosmetic> allPixelCosmetics = [
     id: 'px_item_quest_bags', name: 'Shopping Spree Bags', slot: PixelSlot.item,
     rarity: PixelRarity.epic, isQuestExclusive: true,
     assetPath: 'assets/avatar_pixel/items/item_quest_bags.png',
-    offsetX: -57.38, offsetY: -10.59, scale: 1.840, zOrder: 0,
+    // Same fix as the Poké Ball Charm above: repositioned onto the body but
+    // zOrder:0 left it behind torso/hat. Bumped to 5 for the same reason.
+    offsetX: -57.38, offsetY: -10.59, scale: 1.840, zOrder: 5,
   ),
   PixelCosmetic(
     id: 'px_item_quest_pot', name: 'Potted Sprout', slot: PixelSlot.item,
@@ -592,7 +604,12 @@ const List<PixelCosmetic> allPixelCosmetics = [
     id: 'px_torso_quest_brickcon', name: 'BrickCon Badge Tee', slot: PixelSlot.torso,
     rarity: PixelRarity.epic, isQuestExclusive: true,
     assetPath: 'assets/avatar_pixel/torsos/torso_quest_brickcon.png',
-    offsetX: 0.00, offsetY: 0.00, scale: 1.500, zOrder: 0,
+    // zOrder:0 (tied with legs' default) accidentally reversed the
+    // catalog-wide "torso paints over head" rule for this one shirt --
+    // no evidence this was intentional (offsetX/Y are both untouched at 0
+    // too), so dropped entirely to fall back to torso's own defaultZ(2),
+    // matching every other torso item's normal behavior.
+    offsetX: 0.00, offsetY: 0.00, scale: 1.500,
   ),
   // Two art passes on the same shirt concept -- both kept as separate,
   // independently schedulable items rather than picking one, since which

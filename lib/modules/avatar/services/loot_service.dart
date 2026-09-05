@@ -131,6 +131,20 @@ class LootService extends ChangeNotifier {
           canClaim:  true,
           nextTier:  _streak.nextTier,
         );
+        // Fire-and-forget, deliberately not awaited -- this is a getter, and
+        // this getter is read directly inside build() methods (daily_claim_
+        // screen, DailyBrickClaimCard), so calling notifyListeners()
+        // SYNCHRONOUSLY here (as _saveStreak does at its end) would risk a
+        // "called during build" reentrancy error if a widget reading .streak
+        // is itself what triggered this self-correction. Calling the async
+        // _saveStreak() without awaiting defers its notifyListeners() to a
+        // later microtask, after the current build has finished -- and as a
+        // bonus this now actually PERSISTS the corrected canClaim:true
+        // instead of leaving it real only in memory until the next explicit
+        // claim (a second, smaller gap the original self-correction had:
+        // force-quitting the app right after midnight but before claiming
+        // would have re-lost the correction on next cold start).
+        _saveStreak();
       }
     }
     return _streak;
