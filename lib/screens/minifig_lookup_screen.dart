@@ -316,10 +316,15 @@ class _State extends State<MinifigLookupScreen> {
     final owned = svc.contains(fig);
 
     return GestureDetector(
-      onTap: owned
-          ? () => Navigator.push(context, MaterialPageRoute(
+      // Owned -> straight to detail, same as before. Not owned -> a
+      // confirm-before-add preview (bigger picture, see _showPreview)
+      // instead of adding on a single tap -- minifigs reuse a lot of
+      // body/head molds across variants, so a 64px list thumbnail alone
+      // isn't always enough to be sure it's the right one.
+      onTap: () => owned
+          ? Navigator.push(context, MaterialPageRoute(
               builder: (_) => MinifigDetailScreen(figNum: fig)))
-          : null,
+          : _showPreview(rb),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
@@ -329,7 +334,7 @@ class _State extends State<MinifigLookupScreen> {
         ),
         child: Row(children: [
           Container(
-            width: 48, height: 48,
+            width: 64, height: 64,
             decoration: BoxDecoration(
               color: bt.surface,
               borderRadius: BorderRadius.circular(8),
@@ -355,7 +360,7 @@ class _State extends State<MinifigLookupScreen> {
             const Icon(Icons.check_circle, color: BT.green, size: 22)
           else
             GestureDetector(
-              onTap: () => _add(rb),
+              onTap: () => _showPreview(rb),
               child: Container(
                 width: 30, height: 30,
                 decoration: BoxDecoration(
@@ -369,6 +374,85 @@ class _State extends State<MinifigLookupScreen> {
         ]),
       ),
     );
+  }
+
+  // Confirm-before-add: a big (200px) picture + name + fig-num, so a search
+  // result that looked plausible as a small list thumbnail can actually be
+  // confirmed before it lands in the collection -- LEGO reuses molds across
+  // variants (troopers, pilots, etc. especially) often enough that a 64px
+  // row thumbnail alone isn't a reliable "yes, that one" check.
+  Future<void> _showPreview(Map<String, dynamic> rb) async {
+    final bt = context.bt;
+    final fig = rb['set_num'] as String? ?? '';
+    final name = rb['name'] as String? ?? fig;
+    final image = rb['set_img_url'] as String?;
+    final parts = rb['num_parts'] as int?;
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: bt.cardBg,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        side: BorderSide(color: bt.cardBorder, width: BT.bw),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SheetHandle(),
+            const SizedBox(height: 16),
+            Container(
+              width: 200, height: 200,
+              decoration: BoxDecoration(
+                color: bt.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: bt.cardBorder, width: BT.bw),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: image != null
+                  ? CachedNetworkImage(imageUrl: image, fit: BoxFit.contain,
+                      errorWidget: (_, __, ___) => Icon(Icons.emoji_people, color: bt.txMuted, size: 48))
+                  : Icon(Icons.emoji_people, color: bt.txMuted, size: 48),
+            ),
+            const SizedBox(height: 16),
+            Text(name, textAlign: TextAlign.center,
+                style: BT.display(size: 18, color: bt.tx)),
+            const SizedBox(height: 4),
+            Text(
+              [fig, if (parts != null) '$parts parts'].join(' · '),
+              style: BT.mono(size: 11, color: bt.tx3),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx, true),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: BT.yellow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: BT.ink, width: BT.bw),
+                ),
+                child: Center(child: Text('Add to my minifigs',
+                    style: BT.body(size: 14, weight: FontWeight.w700, color: BT.ink))),
+              ),
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx, false),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Center(child: Text('Not this one',
+                    style: BT.body(size: 13, color: bt.tx2))),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+
+    if (confirmed == true) await _add(rb);
   }
 }
 
