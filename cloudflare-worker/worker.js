@@ -1702,6 +1702,26 @@ var json = /* @__PURE__ */ __name((data, status = 200) => new Response(JSON.stri
   headers: { "Content-Type": "application/json", ...CORS }
 }), "json");
 var err = /* @__PURE__ */ __name((msg, status = 400) => json({ error: msg }, status), "err");
+// Shared admin-secret check -- was copy-pasted inline (header-only) at 11
+// separate call sites before this (a code review flagged the duplication).
+// Also fixes a real usability gap that duplication caused: the two newest
+// gated endpoints (/seed/status, /seed/run, /seed/errors, /admin/activity)
+// broke "just visit the URL in a browser" for anyone who'd bookmarked them,
+// since a plain browser request can't set a custom header. A `?secret=`
+// query param is checked as a fallback specifically so that stays possible
+// -- this is still not public (nobody gets in without knowing the value),
+// just reachable without an HTTP client that can set headers.
+function checkAdminSecret(request, env) {
+  const expected = env.NEWS_SECRET || "brikstax2026";
+  const headerSecret = request.headers.get("x-brikstax-secret");
+  if (headerSecret === expected) return true;
+  try {
+    return new URL(request.url).searchParams.get("secret") === expected;
+  } catch {
+    return false;
+  }
+}
+__name(checkAdminSecret, "checkAdminSecret");
 var _rbKeyIdx = 0;
 function nextRbKey(env) {
   const keys = [env.RB_KEY, env.RB_KEY2, env.RB_KEY3].filter(Boolean);
@@ -1830,8 +1850,7 @@ __name(handleWhatsNewGet, "handleWhatsNewGet");
 // content, unlike the public per-version GET above.
 async function handleWhatsNewAll(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   await ensureWhatsNewTable(env);
   try {
     const rows = await env.PRICE_CACHE.prepare(
@@ -1846,8 +1865,7 @@ async function handleWhatsNewAll(request, env) {
 __name(handleWhatsNewAll, "handleWhatsNewAll");
 async function handleWhatsNewPost(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   await ensureWhatsNewTable(env);
   let body;
   try {
@@ -2154,8 +2172,7 @@ async function handleNewsGet(url, env) {
 __name(handleNewsGet, "handleNewsGet");
 async function handleNewsPost(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   let body;
   try {
     body = await request.json();
@@ -2177,8 +2194,7 @@ async function handleNewsPost(request, env) {
 __name(handleNewsPost, "handleNewsPost");
 async function handleNewsClear(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   let body;
   try {
     body = await request.json();
@@ -2615,8 +2631,7 @@ async function handleDealsGet(url, env) {
 __name(handleDealsGet, "handleDealsGet");
 async function handleDealsAdd(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   let body;
   try {
     body = await request.json();
@@ -2655,8 +2670,7 @@ async function handleDealsAdd(request, env) {
 __name(handleDealsAdd, "handleDealsAdd");
 async function handleDealsClear(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   let body;
   try {
     body = await request.json();
@@ -2898,8 +2912,7 @@ __name(handleBricksetUsage, "handleBricksetUsage");
 // this off is cheap insurance regardless of whether it was ever the actual
 // culprit, since nothing in the app or website ever called it anyway.
 async function handleAdminActivity(request, env) {
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   if (!env.PRICE_CACHE) return err("No D1 binding");
   const out = { generated_at: Date.now() };
   try {
@@ -3110,8 +3123,7 @@ __name(runSeedBatch, "runSeedBatch");
 // see that function's comment for why (uncached COUNT(*) scans of
 // barcode_cache on every call, previously reachable with no auth at all).
 async function handleSeedStatus(request, env) {
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   if (!env.PRICE_CACHE) return err("No D1 binding");
   try {
     const progress = await env.PRICE_CACHE.prepare("SELECT * FROM seed_progress WHERE id = 1").first();
@@ -3130,14 +3142,12 @@ __name(handleSeedStatus, "handleSeedStatus");
 // two (read-only), a bare GET here actually TRIGGERS a real seed batch:
 // live BrickSet calls and D1 writes, on demand, for anyone with the URL.
 async function handleSeedRun(request, env) {
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   return json(await runSeedBatch(env));
 }
 __name(handleSeedRun, "handleSeedRun");
 async function handleSeedErrors(request, env) {
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   if (!env.PRICE_CACHE) return err("No D1 binding");
   try {
     const rows = await env.PRICE_CACHE.prepare("SELECT * FROM seed_errors ORDER BY occurred_at DESC LIMIT 30").all();
@@ -4094,8 +4104,7 @@ async function handleCommunityClaimRewards(request, env) {
 __name(handleCommunityClaimRewards, "handleCommunityClaimRewards");
 async function handleCommunityModerate(request, env) {
   if (!env.PRICE_CACHE) return err("No D1 binding");
-  const secret = request.headers.get("x-brikstax-secret");
-  if (secret !== (env.NEWS_SECRET || "brikstax2026")) return err("Unauthorized", 401);
+  if (!checkAdminSecret(request, env)) return err("Unauthorized", 401);
   let body;
   try {
     body = await request.json();
