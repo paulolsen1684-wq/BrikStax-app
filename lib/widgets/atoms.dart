@@ -69,7 +69,7 @@ class ThemeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = themeColor(theme);
-    final bg    = Color.alphaBlend(color.withOpacity(.12), Colors.white);
+    final bg    = Color.alphaBlend(color.withValues(alpha: .12), Colors.white);
     final label = compact ? _short(theme)
         : subtheme != null ? '$theme · $subtheme' : theme;
     return Container(
@@ -78,7 +78,7 @@ class ThemeBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(.5), width: 1.8),
+        border: Border.all(color: color.withValues(alpha: .5), width: 1.8),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
